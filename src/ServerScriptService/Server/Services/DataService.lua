@@ -39,6 +39,17 @@ local function deepCopy<T>(value: T): T
 	return (copy :: any) :: T
 end
 
+-- "Studio access to API Services" being off (the default for a new/unpublished
+-- place) makes every DataStore call fail immediately and permanently - no
+-- amount of retrying fixes that. Recognize it and bail after one attempt
+-- instead of burning ~4.5 real seconds retrying a call that can never
+-- succeed, which otherwise reads as "the game is stuck/broken" on first test.
+local function isStudioApiDisabledError(err: string): boolean
+	local lower = string.lower(err)
+	return string.find(lower, "studio", 1, true) ~= nil
+		or string.find(lower, "api services", 1, true) ~= nil
+end
+
 local function withRetry<T>(fn: () -> T, attempts: number): (boolean, T | string)
 	local lastError: string = "unknown error"
 	for attempt = 1, attempts do
@@ -47,6 +58,9 @@ local function withRetry<T>(fn: () -> T, attempts: number): (boolean, T | string
 			return true, result
 		end
 		lastError = tostring(result)
+		if isStudioApiDisabledError(lastError) then
+			break
+		end
 		task.wait(1.5 * attempt)
 	end
 	return false, lastError
@@ -65,7 +79,10 @@ local function mergeMissingKeys(profile: { [string]: any }, template: { [string]
 end
 
 local function xpRequiredForLevel(level: number): number
-	return math.floor(GameConfig.XPCurveBase * level ^ GameConfig.XPCurveExponent)
+	-- math.max(1, ...) matters: with the current curve, level 1 floors to 0
+	-- XP required, which would silently advance a brand-new (XP=0) profile
+	-- straight to level 2 the moment recomputeLevel runs below.
+	return math.max(1, math.floor(GameConfig.XPCurveBase * level ^ GameConfig.XPCurveExponent))
 end
 
 local function recomputeLevel(profile: Profile)
@@ -150,7 +167,10 @@ function DataService.LoadProfile(player: Player)
 		mergeMissingKeys(profile :: any, ProfileTemplate :: any)
 	else
 		if not ok then
-			warn(`[DataService] Failed to load profile for {player.Name}: {result}. Using a fresh profile.`)
+			local hint = isStudioApiDisabledError(tostring(result))
+				and " (enable \"Studio Access to API Services\" in Game Settings > Security to persist data while testing)"
+				or ""
+			warn(`[DataService] Failed to load profile for {player.Name}: {result}. Using a fresh profile.{hint}`)
 		end
 		profile = deepCopy(ProfileTemplate)
 	end
