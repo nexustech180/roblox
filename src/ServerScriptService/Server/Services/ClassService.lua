@@ -202,7 +202,7 @@ function ClassService._OnCharacterDied(player: Player)
 
 	if Deps.DataService then
 		Deps.DataService.IncrementStat(player, "Deaths", 1)
-		Deps.DataService.AddCredits(player, -GameConfig.DeathCreditPenalty)
+		Deps.DataService.AddGlint(player, -GameConfig.DeathGlintPenalty)
 	end
 
 	local character = player.Character
@@ -214,7 +214,7 @@ function ClassService._OnCharacterDied(player: Player)
 		spawnCorpse(player.Name, player.UserId, character)
 	end
 
-	Deps.NotifyService.Toast(player, `You died. Respawning in {GameConfig.RespawnDelaySeconds}s (-{GameConfig.DeathCreditPenalty} credits).`, "danger")
+	Deps.NotifyService.Toast(player, `You died. Respawning in {GameConfig.RespawnDelaySeconds}s (-{GameConfig.DeathGlintPenalty} Glint).`, "danger")
 
 	task.delay(GameConfig.RespawnDelaySeconds, function()
 		if player.Parent and not aliveState[player] then

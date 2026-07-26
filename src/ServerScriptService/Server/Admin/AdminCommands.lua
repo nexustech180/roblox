@@ -55,15 +55,26 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 		Deps.NotifyService.Toast(caller, `Set {target.Name} to {classId}.`, "success")
 	end,
 
-	credits = function(caller, args)
+	glint = function(caller, args)
 		local target = args[1] and findPlayerByName(args[1])
 		local amount = args[2] and tonumber(args[2])
 		if not target or not amount then
-			Deps.NotifyService.Toast(caller, "Usage: /credits <player> <amount>", "warning")
+			Deps.NotifyService.Toast(caller, "Usage: /glint <player> <amount>", "warning")
 			return
 		end
-		Deps.DataService.AddCredits(target, amount)
-		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} credits.`, "success")
+		Deps.DataService.AddGlint(target, amount)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} Glint.`, "success")
+	end,
+
+	ducats = function(caller, args)
+		local target = args[1] and findPlayerByName(args[1])
+		local amount = args[2] and tonumber(args[2])
+		if not target or not amount then
+			Deps.NotifyService.Toast(caller, "Usage: /ducats <player> <amount>", "warning")
+			return
+		end
+		Deps.DataService.AddDucats(target, amount)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} Aetheric Ducats.`, "success")
 	end,
 
 	addxp = function(caller, args)

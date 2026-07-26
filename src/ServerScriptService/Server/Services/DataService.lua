@@ -55,7 +55,11 @@ end
 local function mergeMissingKeys(profile: { [string]: any }, template: { [string]: any })
 	for key, value in pairs(template) do
 		if profile[key] == nil then
-			profile[key] = value
+			-- Must deep-copy: assigning `value` directly for a table-typed
+			-- default (e.g. OwnedSCPIds) would alias every migrated profile
+			-- to the SAME shared ProfileTemplate table, so mutating one
+			-- player's list (table.insert) would corrupt everyone else's.
+			profile[key] = deepCopy(value)
 		end
 	end
 end
@@ -88,10 +92,15 @@ local function buildLeaderstats(player: Player, profile: Profile)
 	level.Value = profile.Level
 	level.Parent = leaderstats
 
-	local credits = Instance.new("IntValue")
-	credits.Name = "Credits"
-	credits.Value = profile.Credits
-	credits.Parent = leaderstats
+	local glint = Instance.new("IntValue")
+	glint.Name = "Glint"
+	glint.Value = profile.Glint
+	glint.Parent = leaderstats
+
+	local ducats = Instance.new("IntValue")
+	ducats.Name = "Ducats"
+	ducats.Value = profile.AethericDucats
+	ducats.Parent = leaderstats
 
 	local kills = Instance.new("IntValue")
 	kills.Name = "Kills"
@@ -107,13 +116,17 @@ local function syncLeaderstats(player: Player, profile: Profile)
 		return
 	end
 	local level = leaderstats:FindFirstChild("Level") :: IntValue?
-	local credits = leaderstats:FindFirstChild("Credits") :: IntValue?
+	local glint = leaderstats:FindFirstChild("Glint") :: IntValue?
+	local ducats = leaderstats:FindFirstChild("Ducats") :: IntValue?
 	local kills = leaderstats:FindFirstChild("Kills") :: IntValue?
 	if level then
 		level.Value = profile.Level
 	end
-	if credits then
-		credits.Value = profile.Credits
+	if glint then
+		glint.Value = profile.Glint
+	end
+	if ducats then
+		ducats.Value = profile.AethericDucats
 	end
 	if kills then
 		kills.Value = profile.Kills
@@ -174,12 +187,21 @@ function DataService.SaveProfile(player: Player, isFinal: boolean?): boolean
 	return ok
 end
 
-function DataService.AddCredits(player: Player, amount: number)
+function DataService.AddGlint(player: Player, amount: number)
 	local profile = profiles[player]
 	if not profile then
 		return
 	end
-	profile.Credits = math.max(0, profile.Credits + amount)
+	profile.Glint = math.max(0, profile.Glint + amount)
+	syncLeaderstats(player, profile)
+end
+
+function DataService.AddDucats(player: Player, amount: number)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	profile.AethericDucats = math.max(0, profile.AethericDucats + amount)
 	syncLeaderstats(player, profile)
 end
 

@@ -7,13 +7,22 @@
 <Item class="ModuleScript" referent="RBX000005"><Properties>
 <string name="Name">ClassConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Single source of truth for every class. This is a solo career-progression
--- game: you start as Class-D and unlock better classes by leveling up (see
--- UnlockLevel), then freely switch between anything you've already unlocked
--- via the class-change terminal - exactly like unlocking fighting styles/
--- islands by level in a game like Blox Fruits. ClassService reads UnlockLevel
--- to gate MissionService.RequestClassChange; MapScaffold reads SpawnTag to
--- lay out one spawn pad per class automatically.
+-- Single source of truth for every class. This is a career-progression
+-- game: you start as Class-D and rank up through personnel clearance by
+-- leveling (see UnlockLevel), then freely switch between anything you've
+-- unlocked via the class menu - exactly like sailing to a new Sea by level
+-- in a game like Blox Fruits. The clearance ladder below uses the same
+-- breakpoints Blox Fruits uses for its Seas (700 / 1500 / 2450) since
+-- that's the exact pacing being borrowed.
+--
+-- ClassService reads UnlockLevel to gate RequestClassChange; MapScaffold
+-- reads SpawnTag to lay out one spawn pad per class automatically.
+--
+-- NOTE: SCP-049/SCP-106 are still defined here as classes for now, but
+-- they're moving to a separate, price-gated "Helper SCP" system (own +
+-- equip many, not level-locked to one at a time) - see the project plan.
+-- Their UnlockLevel is bumped above Class-A purely so the interim class
+-- menu orders sensibly; don't tune these further, they're getting replaced.
 
 export type ClassId = string
 
@@ -42,86 +51,56 @@ local ClassConfig: { [ClassId]: ClassDefinition } = {
 		WalkSpeed = 16,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "Where everyone starts. No weapon, no keycard, no respect. Grind enough menial errands and you'll earn a real job.",
+		Description = "Where everyone starts. No weapon, no keycard, no respect. Grind enough menial errands and you'll earn real clearance.",
 		SpawnTag = "Spawn_DClass",
 		TeamColor = Color3.fromRGB(196, 160, 84),
 		IsSCP = false,
 		UnlockLevel = 1,
 	},
 
-	Scientist = {
-		Id = "Scientist",
-		DisplayName = "Facility Scientist",
-		Track = "Foundation",
-		MaxHealth = 100,
-		WalkSpeed = 16,
-		KeycardLevel = 2,
-		Tools = { "Radio", "Flashlight" },
-		Description = "Real clearance, still unarmed. Keeps the lights on and the containment logs current.",
-		SpawnTag = "Spawn_Scientist",
-		TeamColor = Color3.fromRGB(255, 255, 255),
-		IsSCP = false,
-		UnlockLevel = 50,
-	},
-
-	Guard = {
-		Id = "Guard",
-		DisplayName = "Facility Guard",
+	ClassC = {
+		Id = "ClassC",
+		DisplayName = "Class-C Personnel",
 		Track = "Foundation",
 		MaxHealth = 110,
 		WalkSpeed = 16,
 		KeycardLevel = 3,
 		Tools = { "P90", "Flashlight", "Radio" },
-		Description = "First armed job in the Foundation. Escort duty, patrol duty, and containment response.",
-		SpawnTag = "Spawn_Guard",
-		TeamColor = Color3.fromRGB(60, 100, 200),
+		Description = "Real clearance, first weapon. Handles security-lite duty and can finally carry a sidearm. Helper SCPs become usable from here on.",
+		SpawnTag = "Spawn_ClassC",
+		TeamColor = Color3.fromRGB(255, 255, 255),
 		IsSCP = false,
-		UnlockLevel = 150,
+		UnlockLevel = 700,
 	},
 
-	ChaosRenegade = {
-		Id = "ChaosRenegade",
-		DisplayName = "Chaos Renegade",
-		Track = "Renegade",
-		MaxHealth = 115,
-		WalkSpeed = 18,
-		KeycardLevel = 0,
-		Tools = { "AKChaos", "Radio" },
-		Description = "You went rogue. No clearance, no rules, better gear - a faster, harder-hitting off-the-books path.",
-		SpawnTag = "Spawn_ChaosRenegade",
-		TeamColor = Color3.fromRGB(120, 30, 30),
-		IsSCP = false,
-		UnlockLevel = 400,
-	},
-
-	MTF = {
-		Id = "MTF",
-		DisplayName = "MTF Nu-7 \"Hammer Down\"",
+	ClassB = {
+		Id = "ClassB",
+		DisplayName = "Class-B Personnel",
 		Track = "Foundation",
-		MaxHealth = 130,
+		MaxHealth = 125,
 		WalkSpeed = 16,
 		KeycardLevel = 4,
 		Tools = { "AK", "Flashlight", "Radio", "Medkit" },
-		Description = "Elite tactical response. Best conventional loadout the Foundation issues.",
-		SpawnTag = "Spawn_MTF",
-		TeamColor = Color3.fromRGB(20, 60, 20),
+		Description = "Frontline tactical response. Rifle, medkit, and the access to back it up.",
+		SpawnTag = "Spawn_ClassB",
+		TeamColor = Color3.fromRGB(60, 100, 200),
 		IsSCP = false,
-		UnlockLevel = 550,
+		UnlockLevel = 1500,
 	},
 
-	SiteDirector = {
-		Id = "SiteDirector",
-		DisplayName = "Site Director (O5 Command)",
+	ClassA = {
+		Id = "ClassA",
+		DisplayName = "Class-A Personnel (O5 Command)",
 		Track = "Foundation",
 		MaxHealth = 150,
 		WalkSpeed = 17,
 		KeycardLevel = 5,
 		Tools = { "AK", "Medkit", "Flashlight", "Radio" },
-		Description = "The big milestone. Full clearance, command-grade loadout, and the respect of everyone still stuck as D-Class.",
-		SpawnTag = "Spawn_SiteDirector",
+		Description = "The top of the conventional ladder. Full clearance, command-grade loadout - everything below answers to you.",
+		SpawnTag = "Spawn_ClassA",
 		TeamColor = Color3.fromRGB(180, 20, 20),
 		IsSCP = false,
-		UnlockLevel = 700,
+		UnlockLevel = 2450,
 	},
 
 	SCP049 = {
@@ -132,11 +111,11 @@ local ClassConfig: { [ClassId]: ClassDefinition } = {
 		WalkSpeed = 16,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "First prestige unlock. He believes he can cure the Pestilence - his cure does not leave survivors.",
+		Description = "He believes he can cure the Pestilence - his cure does not leave survivors.",
 		SpawnTag = "Spawn_SCP_049",
 		TeamColor = Color3.fromRGB(40, 70, 40),
 		IsSCP = true,
-		UnlockLevel = 1200,
+		UnlockLevel = 2600,
 	},
 
 	SCP106 = {
@@ -147,11 +126,11 @@ local ClassConfig: { [ClassId]: ClassDefinition } = {
 		WalkSpeed = 14,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "The final unlock. Corrodes everything it touches and phases through solid matter at will.",
+		Description = "Corrodes everything it touches and phases through solid matter at will.",
 		SpawnTag = "Spawn_SCP_106",
 		TeamColor = Color3.fromRGB(50, 35, 25),
 		IsSCP = true,
-		UnlockLevel = 1800,
+		UnlockLevel = 3200,
 	},
 }
 
@@ -159,11 +138,9 @@ local ClassConfig: { [ClassId]: ClassDefinition } = {
 -- to find "what's the next class I haven't unlocked yet" for UI hints.
 ClassConfig._UnlockOrder = {
 	"DClass",
-	"Scientist",
-	"Guard",
-	"ChaosRenegade",
-	"MTF",
-	"SiteDirector",
+	"ClassC",
+	"ClassB",
+	"ClassA",
 	"SCP049",
 	"SCP106",
 }
@@ -175,22 +152,25 @@ return ClassConfig
 <Item class="ModuleScript" referent="RBX000006"><Properties>
 <string name="Name">GameConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Core tunables for the solo progression loop. Central place so designers
+-- Core tunables for the progression loop. Central place so designers
 -- never touch service code.
 
 export type GameConfig = {
 	RespawnDelaySeconds: number,
 	CorpseLifetimeSeconds: number,
-	DeathCreditPenalty: number,
+	DeathGlintPenalty: number,
 
 	-- XP curve: xpRequiredForLevel(level) = XPCurveBase * level ^ XPCurveExponent.
 	-- Exponent > 1 makes each level cost more than the last (Blox-Fruits-style
 	-- grind that gets steeper the higher you go), not a flat per-level cost.
+	-- Tuned so cumulative XP at the clearance breakpoints (700/1500/2450) lands
+	-- around 230K/1.1M/3.0M - a real grind, not the ~4.5 BILLION the naive
+	-- base=80/exponent=1.4 pairing produced at this level cap.
 	XPCurveBase: number,
 	XPCurveExponent: number,
 
 	-- Mission difficulty scaling: every DifficultyLevelStep levels, objective
-	-- counts/durations/NPC health scale up by DifficultyScalePerStep.
+	-- counts/durations/NPC health/rewards scale up by DifficultyScalePerStep.
 	DifficultyLevelStep: number,
 	DifficultyScalePerStep: number,
 
@@ -202,10 +182,10 @@ export type GameConfig = {
 local GameConfig: GameConfig = {
 	RespawnDelaySeconds = 4,
 	CorpseLifetimeSeconds = 30,
-	DeathCreditPenalty = 25,
+	DeathGlintPenalty = 25,
 
-	XPCurveBase = 80,
-	XPCurveExponent = 1.4,
+	XPCurveBase = 0.7,
+	XPCurveExponent = 1.05,
 
 	DifficultyLevelStep = 25,
 	DifficultyScalePerStep = 0.12,
@@ -265,7 +245,7 @@ return KeycardConfig
 --   "EliminateNPCCount" -> kill BaseCount hostile NPCs spawned for this attempt
 --   "SurviveTime"        -> stay alive until BaseDuration elapses
 --
--- BaseCount/BaseDuration/BaseRewardCredits/BaseRewardXP are all scaled up by
+-- BaseCount/BaseDuration/BaseRewardGlint/BaseRewardXP are all scaled up by
 -- MissionService using GameConfig.DifficultyLevelStep/DifficultyScalePerStep,
 -- so the same mission gets meaningfully harder (and more rewarding) as you level.
 
@@ -285,7 +265,7 @@ export type MissionDefinition = {
 	DisplayName: string,
 	ClassId: string, -- which class's pool this mission belongs to
 	Objectives: { Objective },
-	BaseRewardCredits: number,
+	BaseRewardGlint: number,
 	BaseRewardXP: number,
 }
 
@@ -300,7 +280,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 			{ Type = "ReachZone", ZoneTag = "Zone_Surface", Description = "Carry the supply crate to the surface elevator." },
 			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Bring the empty crate back to the cell block." },
 		},
-		BaseRewardCredits = 20,
+		BaseRewardGlint = 20,
 		BaseRewardXP = 40,
 	},
 	FileTheReport = {
@@ -310,7 +290,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "File the incident report at the terminal." },
 		},
-		BaseRewardCredits = 15,
+		BaseRewardGlint = 15,
 		BaseRewardXP = 30,
 	},
 	LateShift = {
@@ -320,174 +300,172 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "SurviveTime", BaseDurationSeconds = 90, Description = "Survive the late shift without incident." },
 		},
-		BaseRewardCredits = 20,
+		BaseRewardGlint = 20,
 		BaseRewardXP = 35,
 	},
 
-	-- ===== Scientist: still unarmed, more access =====
+	-- ===== Class-C Personnel =====
 	RecoverResearchData = {
 		Id = "RecoverResearchData",
 		DisplayName = "Recover Research Data",
-		ClassId = "Scientist",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Pull the research data from the terminal." },
 		},
-		BaseRewardCredits = 35,
+		BaseRewardGlint = 35,
 		BaseRewardXP = 70,
 	},
 	ContainTheBreach = {
 		Id = "ContainTheBreach",
 		DisplayName = "Contain The Breach",
-		ClassId = "Scientist",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Reach the containment wing." },
 			{ Type = "InteractPart", PartTag = "Terminal_Containment", Description = "Lock down containment from the terminal." },
 		},
-		BaseRewardCredits = 45,
+		BaseRewardGlint = 45,
 		BaseRewardXP = 90,
 	},
 	InventoryCheck = {
 		Id = "InventoryCheck",
 		DisplayName = "Armory Inventory Check",
-		ClassId = "Scientist",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Count the armory stock." },
 		},
-		BaseRewardCredits = 30,
+		BaseRewardGlint = 30,
 		BaseRewardXP = 60,
 	},
 
-	-- ===== Guard: first armed class =====
 	NeutralizeIntruders = {
 		Id = "NeutralizeIntruders",
 		DisplayName = "Neutralize Intruders",
-		ClassId = "Guard",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 3, Description = "Neutralize the intruders." },
 		},
-		BaseRewardCredits = 60,
+		BaseRewardGlint = 60,
 		BaseRewardXP = 120,
 	},
 	SecureTheArmory = {
 		Id = "SecureTheArmory",
 		DisplayName = "Secure The Armory",
-		ClassId = "Guard",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Secure the armory." },
 		},
-		BaseRewardCredits = 40,
+		BaseRewardGlint = 40,
 		BaseRewardXP = 80,
 	},
 	CellBlockPatrol = {
 		Id = "CellBlockPatrol",
 		DisplayName = "Cell Block Patrol",
-		ClassId = "Guard",
+		ClassId = "ClassC",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Patrol the cell block." },
 			{ Type = "EliminateNPCCount", BaseCount = 2, Description = "Put down the rioters." },
 		},
-		BaseRewardCredits = 65,
+		BaseRewardGlint = 65,
 		BaseRewardXP = 130,
 	},
 
-	-- ===== Chaos Renegade: rogue combat path =====
+	-- ===== Class-B Personnel =====
 	RaidTheArmory = {
 		Id = "RaidTheArmory",
 		DisplayName = "Raid The Armory",
-		ClassId = "ChaosRenegade",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Raid the armory." },
 		},
-		BaseRewardCredits = 55,
+		BaseRewardGlint = 55,
 		BaseRewardXP = 110,
 	},
 	EliminateFoundationPatrol = {
 		Id = "EliminateFoundationPatrol",
 		DisplayName = "Eliminate Foundation Patrol",
-		ClassId = "ChaosRenegade",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 4, Description = "Eliminate the Foundation patrol." },
 		},
-		BaseRewardCredits = 80,
+		BaseRewardGlint = 80,
 		BaseRewardXP = 160,
 	},
 	FreeThePrisoners = {
 		Id = "FreeThePrisoners",
 		DisplayName = "Free The Prisoners",
-		ClassId = "ChaosRenegade",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Reach the cell block." },
 			{ Type = "InteractPart", PartTag = "Terminal_CellRelease", Description = "Release the cell locks." },
 		},
-		BaseRewardCredits = 70,
+		BaseRewardGlint = 70,
 		BaseRewardXP = 140,
 	},
 
-	-- ===== MTF: heavy conventional combat =====
 	PurgeHostiles = {
 		Id = "PurgeHostiles",
 		DisplayName = "Purge Hostiles",
-		ClassId = "MTF",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 5, Description = "Purge all hostiles in the sector." },
 		},
-		BaseRewardCredits = 100,
+		BaseRewardGlint = 100,
 		BaseRewardXP = 200,
 	},
 	RecoverClassifiedIntel = {
 		Id = "RecoverClassifiedIntel",
 		DisplayName = "Recover Classified Intel",
-		ClassId = "MTF",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 3, Description = "Clear the guards off the terminal." },
 			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Download the classified intel." },
 		},
-		BaseRewardCredits = 110,
+		BaseRewardGlint = 110,
 		BaseRewardXP = 220,
 	},
 	ContainAndTerminate = {
 		Id = "ContainAndTerminate",
 		DisplayName = "Contain And Terminate",
-		ClassId = "MTF",
+		ClassId = "ClassB",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Reach the containment wing." },
 			{ Type = "EliminateNPCCount", BaseCount = 4, Description = "Terminate the breach." },
 		},
-		BaseRewardCredits = 115,
+		BaseRewardGlint = 115,
 		BaseRewardXP = 230,
 	},
 
-	-- ===== Site Director: endgame Foundation =====
+	-- ===== Class-A Personnel: endgame conventional tier =====
 	FullFacilitySweep = {
 		Id = "FullFacilitySweep",
 		DisplayName = "Full Facility Sweep",
-		ClassId = "SiteDirector",
+		ClassId = "ClassA",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 8, Description = "Sweep the entire facility." },
 		},
-		BaseRewardCredits = 160,
+		BaseRewardGlint = 160,
 		BaseRewardXP = 320,
 	},
 	CommandOverride = {
 		Id = "CommandOverride",
 		DisplayName = "Command Override",
-		ClassId = "SiteDirector",
+		ClassId = "ClassA",
 		Objectives = {
 			{ Type = "InteractPart", PartTag = "Terminal_Containment", Description = "Override containment protocols." },
 			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Override the intel network." },
 		},
-		BaseRewardCredits = 140,
+		BaseRewardGlint = 140,
 		BaseRewardXP = 280,
 	},
 	TotalLockdownResponse = {
 		Id = "TotalLockdownResponse",
 		DisplayName = "Total Lockdown Response",
-		ClassId = "SiteDirector",
+		ClassId = "ClassA",
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 6, Description = "Respond to the lockdown." },
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Personally secure containment." },
 		},
-		BaseRewardCredits = 175,
+		BaseRewardGlint = 175,
 		BaseRewardXP = 350,
 	},
 
@@ -499,7 +477,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 5, Description = "Find a cure for all of them." },
 		},
-		BaseRewardCredits = 200,
+		BaseRewardGlint = 200,
 		BaseRewardXP = 400,
 	},
 	PurgeTheWing = {
@@ -510,7 +488,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Return to your wing." },
 			{ Type = "EliminateNPCCount", BaseCount = 7, Description = "Purge the wing of the Pestilence." },
 		},
-		BaseRewardCredits = 230,
+		BaseRewardGlint = 230,
 		BaseRewardXP = 460,
 	},
 	EndlessPlague = {
@@ -520,7 +498,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "SurviveTime", BaseDurationSeconds = 240, Description = "Outlast the outbreak." },
 		},
-		BaseRewardCredits = 210,
+		BaseRewardGlint = 210,
 		BaseRewardXP = 420,
 	},
 
@@ -532,7 +510,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 6, Description = "Corrode everything in your path." },
 		},
-		BaseRewardCredits = 260,
+		BaseRewardGlint = 260,
 		BaseRewardXP = 520,
 	},
 	VanishAndReturn = {
@@ -543,7 +521,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Phase into the armory." },
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Phase back to containment." },
 		},
-		BaseRewardCredits = 240,
+		BaseRewardGlint = 240,
 		BaseRewardXP = 480,
 	},
 	TheOldMansHunt = {
@@ -553,18 +531,16 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		Objectives = {
 			{ Type = "EliminateNPCCount", BaseCount = 9, Description = "There is no corner of the facility you cannot reach." },
 		},
-		BaseRewardCredits = 300,
+		BaseRewardGlint = 300,
 		BaseRewardXP = 600,
 	},
 }
 
 MissionConfig._PoolByClass = {
 	DClass = { "SupplyRun", "FileTheReport", "LateShift" },
-	Scientist = { "RecoverResearchData", "ContainTheBreach", "InventoryCheck" },
-	Guard = { "NeutralizeIntruders", "SecureTheArmory", "CellBlockPatrol" },
-	ChaosRenegade = { "RaidTheArmory", "EliminateFoundationPatrol", "FreeThePrisoners" },
-	MTF = { "PurgeHostiles", "RecoverClassifiedIntel", "ContainAndTerminate" },
-	SiteDirector = { "FullFacilitySweep", "CommandOverride", "TotalLockdownResponse" },
+	ClassC = { "RecoverResearchData", "ContainTheBreach", "InventoryCheck", "NeutralizeIntruders", "SecureTheArmory", "CellBlockPatrol" },
+	ClassB = { "RaidTheArmory", "EliminateFoundationPatrol", "FreeThePrisoners", "PurgeHostiles", "RecoverClassifiedIntel", "ContainAndTerminate" },
+	ClassA = { "FullFacilitySweep", "CommandOverride", "TotalLockdownResponse" },
 	SCP049 = { "HuntTheLiving", "PurgeTheWing", "EndlessPlague" },
 	SCP106 = { "CorrodeTheFoundation", "VanishAndReturn", "TheOldMansHunt" },
 }
@@ -983,15 +959,26 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 		Deps.NotifyService.Toast(caller, `Set {target.Name} to {classId}.`, "success")
 	end,
 
-	credits = function(caller, args)
+	glint = function(caller, args)
 		local target = args[1] and findPlayerByName(args[1])
 		local amount = args[2] and tonumber(args[2])
 		if not target or not amount then
-			Deps.NotifyService.Toast(caller, "Usage: /credits <player> <amount>", "warning")
+			Deps.NotifyService.Toast(caller, "Usage: /glint <player> <amount>", "warning")
 			return
 		end
-		Deps.DataService.AddCredits(target, amount)
-		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} credits.`, "success")
+		Deps.DataService.AddGlint(target, amount)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} Glint.`, "success")
+	end,
+
+	ducats = function(caller, args)
+		local target = args[1] and findPlayerByName(args[1])
+		local amount = args[2] and tonumber(args[2])
+		if not target or not amount then
+			Deps.NotifyService.Toast(caller, "Usage: /ducats <player> <amount>", "warning")
+			return
+		end
+		Deps.DataService.AddDucats(target, amount)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} Aetheric Ducats.`, "success")
 	end,
 
 	addxp = function(caller, args)
@@ -1050,20 +1037,24 @@ return AdminCommands
 -- new players and migrates old profiles forward by merging missing keys.
 
 export type Profile = {
-	Credits: number,
+	Glint: number, -- everyday currency: buying Helper SCPs, gear
+	AethericDucats: number, -- rare currency: Cybernetics upgrades only
 	XP: number,
 	Level: number,
 	Kills: number,
 	Deaths: number,
 	MissionsCompleted: number,
-	SCPKills: number, -- kills recorded while playing an SCP prestige class
+	SCPKills: number, -- kills recorded while playing a Helper SCP
 	Escapes: number, -- flavor stat: "reach the surface"-style objective completions
 	CurrentClassId: string, -- persists across sessions so you resume as whatever you last picked
+	OwnedSCPIds: { string }, -- Helper SCPs bought at the Lab or stolen via PvP
+	UpgradedSCPIds: { string }, -- which owned SCPs have had Cybernetics applied
 	SchemaVersion: number,
 }
 
 local ProfileTemplate: Profile = {
-	Credits = 100,
+	Glint = 100,
+	AethericDucats = 0,
 	XP = 0,
 	Level = 1,
 	Kills = 0,
@@ -1072,7 +1063,9 @@ local ProfileTemplate: Profile = {
 	SCPKills = 0,
 	Escapes = 0,
 	CurrentClassId = "DClass",
-	SchemaVersion = 2,
+	OwnedSCPIds = {},
+	UpgradedSCPIds = {},
+	SchemaVersion = 3,
 }
 
 return ProfileTemplate
@@ -1584,7 +1577,7 @@ function ClassService._OnCharacterDied(player: Player)
 
 	if Deps.DataService then
 		Deps.DataService.IncrementStat(player, "Deaths", 1)
-		Deps.DataService.AddCredits(player, -GameConfig.DeathCreditPenalty)
+		Deps.DataService.AddGlint(player, -GameConfig.DeathGlintPenalty)
 	end
 
 	local character = player.Character
@@ -1596,7 +1589,7 @@ function ClassService._OnCharacterDied(player: Player)
 		spawnCorpse(player.Name, player.UserId, character)
 	end
 
-	Deps.NotifyService.Toast(player, `You died. Respawning in {GameConfig.RespawnDelaySeconds}s (-{GameConfig.DeathCreditPenalty} credits).`, "danger")
+	Deps.NotifyService.Toast(player, `You died. Respawning in {GameConfig.RespawnDelaySeconds}s (-{GameConfig.DeathGlintPenalty} Glint).`, "danger")
 
 	task.delay(GameConfig.RespawnDelaySeconds, function()
 		if player.Parent and not aliveState[player] then
@@ -1924,7 +1917,11 @@ end
 local function mergeMissingKeys(profile: { [string]: any }, template: { [string]: any })
 	for key, value in pairs(template) do
 		if profile[key] == nil then
-			profile[key] = value
+			-- Must deep-copy: assigning `value` directly for a table-typed
+			-- default (e.g. OwnedSCPIds) would alias every migrated profile
+			-- to the SAME shared ProfileTemplate table, so mutating one
+			-- player's list (table.insert) would corrupt everyone else's.
+			profile[key] = deepCopy(value)
 		end
 	end
 end
@@ -1957,10 +1954,15 @@ local function buildLeaderstats(player: Player, profile: Profile)
 	level.Value = profile.Level
 	level.Parent = leaderstats
 
-	local credits = Instance.new("IntValue")
-	credits.Name = "Credits"
-	credits.Value = profile.Credits
-	credits.Parent = leaderstats
+	local glint = Instance.new("IntValue")
+	glint.Name = "Glint"
+	glint.Value = profile.Glint
+	glint.Parent = leaderstats
+
+	local ducats = Instance.new("IntValue")
+	ducats.Name = "Ducats"
+	ducats.Value = profile.AethericDucats
+	ducats.Parent = leaderstats
 
 	local kills = Instance.new("IntValue")
 	kills.Name = "Kills"
@@ -1976,13 +1978,17 @@ local function syncLeaderstats(player: Player, profile: Profile)
 		return
 	end
 	local level = leaderstats:FindFirstChild("Level") :: IntValue?
-	local credits = leaderstats:FindFirstChild("Credits") :: IntValue?
+	local glint = leaderstats:FindFirstChild("Glint") :: IntValue?
+	local ducats = leaderstats:FindFirstChild("Ducats") :: IntValue?
 	local kills = leaderstats:FindFirstChild("Kills") :: IntValue?
 	if level then
 		level.Value = profile.Level
 	end
-	if credits then
-		credits.Value = profile.Credits
+	if glint then
+		glint.Value = profile.Glint
+	end
+	if ducats then
+		ducats.Value = profile.AethericDucats
 	end
 	if kills then
 		kills.Value = profile.Kills
@@ -2043,12 +2049,21 @@ function DataService.SaveProfile(player: Player, isFinal: boolean?): boolean
 	return ok
 end
 
-function DataService.AddCredits(player: Player, amount: number)
+function DataService.AddGlint(player: Player, amount: number)
 	local profile = profiles[player]
 	if not profile then
 		return
 	end
-	profile.Credits = math.max(0, profile.Credits + amount)
+	profile.Glint = math.max(0, profile.Glint + amount)
+	syncLeaderstats(player, profile)
+end
+
+function DataService.AddDucats(player: Player, amount: number)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	profile.AethericDucats = math.max(0, profile.AethericDucats + amount)
 	syncLeaderstats(player, profile)
 end
 
@@ -2576,15 +2591,15 @@ local function completeMission(player: Player, state: PlayerState)
 	local profile = Deps.DataService.GetProfile(player)
 	local level = profile and profile.Level or 1
 	local scale = difficultyScale(level)
-	local credits = math.ceil(def.BaseRewardCredits * scale)
+	local glint = math.ceil(def.BaseRewardGlint * scale)
 	local xp = math.ceil(def.BaseRewardXP * scale)
 
 	if Deps.DataService then
-		Deps.DataService.AddCredits(player, credits)
+		Deps.DataService.AddGlint(player, glint)
 		Deps.DataService.AddXP(player, xp)
 		Deps.DataService.IncrementStat(player, "MissionsCompleted", 1)
 	end
-	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{credits} credits, +{xp} XP)`, "success")
+	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{glint} Glint, +{xp} XP)`, "success")
 	broadcastProgress(player, state, true)
 
 	state.lastMissionId = def.Id

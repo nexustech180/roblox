@@ -127,15 +127,15 @@ local function completeMission(player: Player, state: PlayerState)
 	local profile = Deps.DataService.GetProfile(player)
 	local level = profile and profile.Level or 1
 	local scale = difficultyScale(level)
-	local credits = math.ceil(def.BaseRewardCredits * scale)
+	local glint = math.ceil(def.BaseRewardGlint * scale)
 	local xp = math.ceil(def.BaseRewardXP * scale)
 
 	if Deps.DataService then
-		Deps.DataService.AddCredits(player, credits)
+		Deps.DataService.AddGlint(player, glint)
 		Deps.DataService.AddXP(player, xp)
 		Deps.DataService.IncrementStat(player, "MissionsCompleted", 1)
 	end
-	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{credits} credits, +{xp} XP)`, "success")
+	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{glint} Glint, +{xp} XP)`, "success")
 	broadcastProgress(player, state, true)
 
 	state.lastMissionId = def.Id
