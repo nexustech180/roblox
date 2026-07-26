@@ -11,10 +11,10 @@ local Players = game:GetService("Players")
 -- spawn flow entirely - ClassService decides exactly when/where to spawn.
 Players.CharacterAutoLoads = false
 
-local Services = script.Services
-local Admin = script.Admin
+local Services = script.Parent.Services
+local Admin = script.Parent.Admin
 
-local MapScaffold = require(script.MapScaffold)
+local MapScaffold = require(script.Parent.MapScaffold)
 MapScaffold.Build()
 
 local LoggingService = require(Services.LoggingService)
