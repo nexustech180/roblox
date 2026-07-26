@@ -5,7 +5,6 @@
 -- actually happens. Also the single choke point ("ApplyDamage") that SCP
 -- abilities route through, so kill attribution works the same everywhere.
 
-local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -17,17 +16,11 @@ local CombatService = {}
 local Deps: any = nil
 
 -- Humanoid -> { player: Player, time: number }. Used for kill attribution by
--- ClassService when Humanoid.Died fires, and by MissionService for EliminateCount.
+-- ClassService when Humanoid.Died fires, and by MissionService/NPCService for
+-- crediting EliminateNPCCount progress to whoever landed the killing blow.
 local lastDamager: { [Humanoid]: { player: Player, time: number } } = {}
 
 local ATTRIBUTION_WINDOW_SECONDS = 12
-
-local function isHostile(factionA: string?, factionB: string?): boolean
-	if factionA == nil or factionB == nil then
-		return true
-	end
-	return factionA ~= factionB
-end
 
 function CombatService.ApplyDamage(attacker: Player?, targetHumanoid: Humanoid, damage: number)
 	if targetHumanoid.Health <= 0 then
@@ -122,15 +115,10 @@ local function onWeaponFire(player: Player, payload: any)
 		return
 	end
 
-	local hitPlayer = Players:GetPlayerFromCharacter(hitCharacter)
-	if hitPlayer then
-		local attackerFaction = Deps.ClassService.GetPlayerFaction(player)
-		local victimFaction = Deps.ClassService.GetPlayerFaction(hitPlayer)
-		if not isHostile(attackerFaction, victimFaction) then
-			return
-		end
-	end
-
+	-- No faction/friendly-fire check needed: this is a solo game, so anything
+	-- hit that isn't the shooter's own character (already excluded from the
+	-- raycast above) is fair game, whether it's an NPC or, in a multi-client
+	-- test session, another player's character.
 	local damage = def.Damage :: number
 	if result.Instance.Name == "Head" then
 		damage *= 1.75

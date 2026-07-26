@@ -7,13 +7,12 @@ local Controllers = script.Parent.Controllers
 
 local CONTROLLER_NAMES = {
 	"NotifyController",
-	"RoundController",
 	"ClassCardController",
+	"ClassMenuController",
 	"MissionController",
 	"HUDController",
 	"CombatController",
 	"SCPAbilityController",
-	"WarheadController",
 }
 
 for _, name in ipairs(CONTROLLER_NAMES) do

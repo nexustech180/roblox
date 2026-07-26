@@ -2,8 +2,8 @@
 -- Server bootstrap. Requires every service exactly once, wires them together
 -- through a shared "Deps" locator (so services never require each other and
 -- can't deadlock on circular requires), then calls Init on each in dependency
--- order. RoundService.Init runs last because it immediately starts checking
--- whether the round should begin, which touches everything else.
+-- order. SessionService.Init runs last because it immediately spawns anyone
+-- whose profile has already loaded, which touches everything else.
 
 local Players = game:GetService("Players")
 
@@ -27,9 +27,10 @@ local CombatService = require(Services.CombatService)
 local KeycardService = require(Services.KeycardService)
 local DoorService = require(Services.DoorService)
 local SCPAbilityService = require(Services.SCPAbilityService)
+local NPCService = require(Services.NPCService)
 local MissionService = require(Services.MissionService)
-local RoundService = require(Services.RoundService)
 local AdminCommands = require(Admin.AdminCommands)
+local SessionService = require(Services.SessionService)
 
 local Deps = {
 	LoggingService = LoggingService,
@@ -42,9 +43,10 @@ local Deps = {
 	KeycardService = KeycardService,
 	DoorService = DoorService,
 	SCPAbilityService = SCPAbilityService,
+	NPCService = NPCService,
 	MissionService = MissionService,
-	RoundService = RoundService,
 	AdminCommands = AdminCommands,
+	SessionService = SessionService,
 }
 
 local INIT_ORDER = {
@@ -58,9 +60,10 @@ local INIT_ORDER = {
 	KeycardService,
 	DoorService,
 	SCPAbilityService,
+	NPCService,
 	MissionService,
 	AdminCommands,
-	RoundService, -- last: kicks off the Lobby/Intermission loop
+	SessionService, -- last: spawns players once everything else is ready
 }
 
 for _, service in ipairs(INIT_ORDER) do

@@ -1,13 +1,12 @@
 --!strict
 -- Generates a minimal, ugly-but-functional placeholder facility at server
--- boot: one spawn pad per class, the mission zones/terminals MissionConfig
--- references, a couple of access-gated doors, and a warhead panel. This
--- means the whole game (round loop, classes, missions, combat, SCP
--- abilities) is testable the moment you hit Play, with zero manual map
--- setup. Replace this with a real Studio-built map by tagging your own
--- geometry with the same CollectionService tags and deleting this script's
--- call in Main.server.lua - every other service only ever looks at tags,
--- never at this generated geometry directly.
+-- boot: one spawn pad per class and the mission zones/terminals
+-- MissionConfig references. This means the whole game (classes, missions,
+-- combat, SCP abilities, leveling) is testable the moment you hit Play, with
+-- zero manual map setup. Replace this with a real Studio-built map by
+-- tagging your own geometry with the same CollectionService tags and
+-- deleting this script's call in Main.server.lua - every other service only
+-- ever looks at tags, never at this generated geometry directly.
 
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
@@ -147,16 +146,6 @@ function MapScaffold.Build()
 	doorsFolder.Parent = root
 	makeDoor("Door_Checkpoint", Vector3.new(20, 4, -100), 3).Parent = doorsFolder
 	makeDoor("Door_CellBlock", Vector3.new(-170, 4, -20), 1, "CellDoor").Parent = doorsFolder
-
-	local warheadPanel = makePart({
-		Name = "WarheadPanel",
-		Size = Vector3.new(3, 3, 1),
-		Position = Vector3.new(0, 2, 0),
-		Color = Color3.fromRGB(220, 40, 40),
-		Material = Enum.Material.Neon,
-	})
-	CollectionService:AddTag(warheadPanel, "WarheadPanel")
-	warheadPanel.Parent = root
 end
 
 return MapScaffold

@@ -7,188 +7,166 @@
 <Item class="ModuleScript" referent="RBX000005"><Properties>
 <string name="Name">ClassConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Single source of truth for every playable class (SCP:SL-style "roles").
--- RoundService reads this to build the roster; ClassService reads it to spawn/equip;
--- client controllers read it to render class cards. Never hardcode class stats elsewhere.
+-- Single source of truth for every class. This is a solo career-progression
+-- game: you start as Class-D and unlock better classes by leveling up (see
+-- UnlockLevel), then freely switch between anything you've already unlocked
+-- via the class-change terminal - exactly like unlocking fighting styles/
+-- islands by level in a game like Blox Fruits. ClassService reads UnlockLevel
+-- to gate MissionService.RequestClassChange; MapScaffold reads SpawnTag to
+-- lay out one spawn pad per class automatically.
 
 export type ClassId = string
 
 export type ClassDefinition = {
 	Id: ClassId,
 	DisplayName: string,
-	Faction: string, -- "DClass" | "Foundation" | "ChaosInsurgency" | "SCP"
+	Track: string, -- flavor grouping for UI color/label only, no gameplay meaning
 	MaxHealth: number,
 	WalkSpeed: number,
 	KeycardLevel: number, -- 0..5, see KeycardConfig
 	Tools: { string },
 	Description: string,
-	SpawnTag: string, -- CollectionService tag on SpawnLocation parts
+	SpawnTag: string, -- CollectionService tag on the spawn part for this class
 	TeamColor: Color3,
 	IsSCP: boolean,
-	AvailableFromStart: boolean,
-	UnlockDelay: number?, -- seconds into the round before this class can be assigned
-	RosterWeight: number, -- relative share of the initial (t=0) roster
-	MaxRosterCount: number?, -- hard cap regardless of weight (mainly for SCPs)
+	UnlockLevel: number, -- profile.Level required before this class can be selected
 }
-
-local GameConfig = require(script.Parent.GameConfig)
 
 local ClassConfig: { [ClassId]: ClassDefinition } = {
 
 	DClass = {
 		Id = "DClass",
 		DisplayName = "Class-D Personnel",
-		Faction = "DClass",
+		Track = "DClass",
 		MaxHealth = 100,
 		WalkSpeed = 16,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "No weapon. No keycard. Your only ways out are the surface elevator, an unlocked door, or a Foundation escort who takes pity on you.",
+		Description = "Where everyone starts. No weapon, no keycard, no respect. Grind enough menial errands and you'll earn a real job.",
 		SpawnTag = "Spawn_DClass",
 		TeamColor = Color3.fromRGB(196, 160, 84),
 		IsSCP = false,
-		AvailableFromStart = true,
-		RosterWeight = 0.34,
+		UnlockLevel = 1,
 	},
 
 	Scientist = {
 		Id = "Scientist",
 		DisplayName = "Facility Scientist",
-		Faction = "Foundation",
+		Track = "Foundation",
 		MaxHealth = 100,
 		WalkSpeed = 16,
 		KeycardLevel = 2,
 		Tools = { "Radio", "Flashlight" },
-		Description = "Keep the lights on and the containment procedures running. You can open most labs, but you are unarmed and fragile.",
+		Description = "Real clearance, still unarmed. Keeps the lights on and the containment logs current.",
 		SpawnTag = "Spawn_Scientist",
 		TeamColor = Color3.fromRGB(255, 255, 255),
 		IsSCP = false,
-		AvailableFromStart = true,
-		RosterWeight = 0.20,
+		UnlockLevel = 50,
 	},
 
 	Guard = {
 		Id = "Guard",
 		DisplayName = "Facility Guard",
-		Faction = "Foundation",
+		Track = "Foundation",
 		MaxHealth = 110,
 		WalkSpeed = 16,
 		KeycardLevel = 3,
 		Tools = { "P90", "Flashlight", "Radio" },
-		Description = "Front-line Foundation security. Escort D-Class, hold checkpoints, and respond to containment breaches.",
+		Description = "First armed job in the Foundation. Escort duty, patrol duty, and containment response.",
 		SpawnTag = "Spawn_Guard",
 		TeamColor = Color3.fromRGB(60, 100, 200),
 		IsSCP = false,
-		AvailableFromStart = true,
-		RosterWeight = 0.21,
+		UnlockLevel = 150,
+	},
+
+	ChaosRenegade = {
+		Id = "ChaosRenegade",
+		DisplayName = "Chaos Renegade",
+		Track = "Renegade",
+		MaxHealth = 115,
+		WalkSpeed = 18,
+		KeycardLevel = 0,
+		Tools = { "AKChaos", "Radio" },
+		Description = "You went rogue. No clearance, no rules, better gear - a faster, harder-hitting off-the-books path.",
+		SpawnTag = "Spawn_ChaosRenegade",
+		TeamColor = Color3.fromRGB(120, 30, 30),
+		IsSCP = false,
+		UnlockLevel = 400,
 	},
 
 	MTF = {
 		Id = "MTF",
 		DisplayName = "MTF Nu-7 \"Hammer Down\"",
-		Faction = "Foundation",
-		MaxHealth = 125,
+		Track = "Foundation",
+		MaxHealth = 130,
 		WalkSpeed = 16,
 		KeycardLevel = 4,
 		Tools = { "AK", "Flashlight", "Radio", "Medkit" },
-		Description = "Heavy reinforcements dropped in once the situation deteriorates. Best gear on the Foundation side.",
+		Description = "Elite tactical response. Best conventional loadout the Foundation issues.",
 		SpawnTag = "Spawn_MTF",
 		TeamColor = Color3.fromRGB(20, 60, 20),
 		IsSCP = false,
-		AvailableFromStart = false,
-		UnlockDelay = GameConfig.MTFReinforceDelaySeconds,
-		RosterWeight = 0.15,
+		UnlockLevel = 550,
 	},
 
-	Chaos = {
-		Id = "Chaos",
-		DisplayName = "Chaos Insurgency",
-		Faction = "ChaosInsurgency",
-		MaxHealth = 115,
+	SiteDirector = {
+		Id = "SiteDirector",
+		DisplayName = "Site Director (O5 Command)",
+		Track = "Foundation",
+		MaxHealth = 150,
 		WalkSpeed = 17,
-		KeycardLevel = 0,
-		Tools = { "AKChaos", "Radio" },
-		Description = "Former D-Class turned insurgents. Free your brothers and put the Foundation in the ground.",
-		SpawnTag = "Spawn_Chaos",
-		TeamColor = Color3.fromRGB(120, 30, 30),
+		KeycardLevel = 5,
+		Tools = { "AK", "Medkit", "Flashlight", "Radio" },
+		Description = "The big milestone. Full clearance, command-grade loadout, and the respect of everyone still stuck as D-Class.",
+		SpawnTag = "Spawn_SiteDirector",
+		TeamColor = Color3.fromRGB(180, 20, 20),
 		IsSCP = false,
-		AvailableFromStart = false,
-		UnlockDelay = GameConfig.ChaosSpawnDelaySeconds,
-		RosterWeight = 0.10,
-	},
-
-	SCP173 = {
-		Id = "SCP173",
-		DisplayName = "SCP-173 \"The Sculpture\"",
-		Faction = "SCP",
-		MaxHealth = 300,
-		WalkSpeed = 0, -- movement is entirely ability-driven (see SCPAbilityService)
-		KeycardLevel = 0,
-		Tools = {},
-		Description = "Do not look away. Do not blink. It only moves when it is not observed.",
-		SpawnTag = "Spawn_SCP_173",
-		TeamColor = Color3.fromRGB(140, 140, 140),
-		IsSCP = true,
-		AvailableFromStart = true,
-		RosterWeight = 0,
-		MaxRosterCount = 1,
+		UnlockLevel = 700,
 	},
 
 	SCP049 = {
 		Id = "SCP049",
 		DisplayName = "SCP-049 \"The Plague Doctor\"",
-		Faction = "SCP",
-		MaxHealth = 175,
+		Track = "SCP",
+		MaxHealth = 200,
 		WalkSpeed = 16,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "He believes he can cure the Pestilence. He is wrong, and his cure does not leave survivors.",
+		Description = "First prestige unlock. He believes he can cure the Pestilence - his cure does not leave survivors.",
 		SpawnTag = "Spawn_SCP_049",
 		TeamColor = Color3.fromRGB(40, 70, 40),
 		IsSCP = true,
-		AvailableFromStart = true,
-		RosterWeight = 0,
-		MaxRosterCount = 1,
-	},
-
-	SCP096 = {
-		Id = "SCP096",
-		DisplayName = "SCP-096 \"The Shy Guy\"",
-		Faction = "SCP",
-		MaxHealth = 400,
-		WalkSpeed = 8,
-		KeycardLevel = 0,
-		Tools = {},
-		Description = "Passive until its face is seen. Then nothing in the facility can stop it from reaching you.",
-		SpawnTag = "Spawn_SCP_096",
-		TeamColor = Color3.fromRGB(200, 200, 210),
-		IsSCP = true,
-		AvailableFromStart = true,
-		RosterWeight = 0,
-		MaxRosterCount = 1,
+		UnlockLevel = 1200,
 	},
 
 	SCP106 = {
 		Id = "SCP106",
 		DisplayName = "SCP-106 \"The Old Man\"",
-		Faction = "SCP",
-		MaxHealth = 500,
+		Track = "SCP",
+		MaxHealth = 300,
 		WalkSpeed = 14,
 		KeycardLevel = 0,
 		Tools = {},
-		Description = "Corrodes everything it touches and phases through solid matter at will. There is no safe room.",
+		Description = "The final unlock. Corrodes everything it touches and phases through solid matter at will.",
 		SpawnTag = "Spawn_SCP_106",
 		TeamColor = Color3.fromRGB(50, 35, 25),
 		IsSCP = true,
-		AvailableFromStart = true,
-		RosterWeight = 0,
-		MaxRosterCount = 1,
+		UnlockLevel = 1800,
 	},
 }
 
--- SCPs are capped/gated by population, not by RosterWeight, so callers should
--- iterate this list to decide which SCPs are "in play" for the current headcount.
-ClassConfig._SCPActivationOrder = { "SCP173", "SCP049", "SCP096", "SCP106" }
+-- Ordered ascending by UnlockLevel, used to render the class-change menu and
+-- to find "what's the next class I haven't unlocked yet" for UI hints.
+ClassConfig._UnlockOrder = {
+	"DClass",
+	"Scientist",
+	"Guard",
+	"ChaosRenegade",
+	"MTF",
+	"SiteDirector",
+	"SCP049",
+	"SCP106",
+}
 
 return ClassConfig
 ]]></ProtectedString>
@@ -197,45 +175,44 @@ return ClassConfig
 <Item class="ModuleScript" referent="RBX000006"><Properties>
 <string name="Name">GameConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Core tunables for the round/game loop. Central place so designers never touch service code.
+-- Core tunables for the solo progression loop. Central place so designers
+-- never touch service code.
 
 export type GameConfig = {
-	MinPlayersToStart: number,
-	IntermissionSeconds: number,
-	RoundLengthSeconds: number,
-	RoundEndDisplaySeconds: number,
-	WarheadFuseSeconds: number,
-	ContainmentBreachChancePerMinute: number,
-	SquadSize: number,
-	SpectatorWalkSpeed: number,
-	ChaosSpawnDelaySeconds: number,
-	MTFReinforceDelaySeconds: number,
+	RespawnDelaySeconds: number,
 	CorpseLifetimeSeconds: number,
-	ReinforcementWaveIntervalSeconds: number,
+	DeathCreditPenalty: number,
+
+	-- XP curve: xpRequiredForLevel(level) = XPCurveBase * level ^ XPCurveExponent.
+	-- Exponent > 1 makes each level cost more than the last (Blox-Fruits-style
+	-- grind that gets steeper the higher you go), not a flat per-level cost.
+	XPCurveBase: number,
+	XPCurveExponent: number,
+
+	-- Mission difficulty scaling: every DifficultyLevelStep levels, objective
+	-- counts/durations/NPC health scale up by DifficultyScalePerStep.
+	DifficultyLevelStep: number,
+	DifficultyScalePerStep: number,
+
+	NPCBaseHealth: number,
+	NPCBaseDamage: number,
+	NPCBaseWalkSpeed: number,
 }
 
 local GameConfig: GameConfig = {
-	-- 1 so a lone developer can playtest end-to-end (round start, class spawn,
-	-- missions) without needing extra test accounts. Raise this for a live
-	-- server where you actually want multiple humans before a round begins.
-	MinPlayersToStart = 1,
-	IntermissionSeconds = 30,
-	RoundLengthSeconds = 60 * 15,
-	RoundEndDisplaySeconds = 12,
-	WarheadFuseSeconds = 90,
-
-	-- Rolled once per minute during an active round; on success a random contained SCP breaches.
-	ContainmentBreachChancePerMinute = 0.12,
-
-	SquadSize = 4,
-	SpectatorWalkSpeed = 24,
-
-	-- Chaos Insurgency and MTF are "wave" factions that do not exist at t=0.
-	ChaosSpawnDelaySeconds = 60 * 3,
-	MTFReinforceDelaySeconds = 60 * 5,
-
+	RespawnDelaySeconds = 4,
 	CorpseLifetimeSeconds = 30,
-	ReinforcementWaveIntervalSeconds = 45,
+	DeathCreditPenalty = 25,
+
+	XPCurveBase = 80,
+	XPCurveExponent = 1.4,
+
+	DifficultyLevelStep = 25,
+	DifficultyScalePerStep = 0.12,
+
+	NPCBaseHealth = 100,
+	NPCBaseDamage = 12,
+	NPCBaseWalkSpeed = 14,
 }
 
 return GameConfig
@@ -276,143 +253,320 @@ return KeycardConfig
 <Item class="ModuleScript" referent="RBX000008"><Properties>
 <string name="Name">MissionConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Mission pool consumed by MissionService. Missions are handed out per-squad
--- (see GameConfig.SquadSize), not per-player, so a group of friends always
--- works the same objective together.
+-- Mission pool consumed by MissionService. Each class has its own small pool
+-- of missions; MissionService hands them out one at a time from a shuffled
+-- "bag" per player (draw without replacement, reshuffle when the bag empties)
+-- so you keep repeating missions to grind XP without ever getting the exact
+-- same one twice in a row.
 --
 -- ObjectiveType meanings (enforced server-side in MissionService):
---   "ReachZone"      -> any squad member touches a part tagged with ZoneTag
---   "InteractPart"   -> any squad member fires the InteractPart remote while
---                        near a part tagged with PartTag (e.g. a terminal)
---   "EliminateCount" -> squad's combined kills against TargetFaction reach Count
---   "SurviveTime"    -> squad has at least one member alive when DurationSeconds elapses
+--   "ReachZone"         -> touch a part tagged with ZoneTag
+--   "InteractPart"      -> use the ProximityPrompt on a part tagged with PartTag
+--   "EliminateNPCCount" -> kill BaseCount hostile NPCs spawned for this attempt
+--   "SurviveTime"        -> stay alive until BaseDuration elapses
+--
+-- BaseCount/BaseDuration/BaseRewardCredits/BaseRewardXP are all scaled up by
+-- MissionService using GameConfig.DifficultyLevelStep/DifficultyScalePerStep,
+-- so the same mission gets meaningfully harder (and more rewarding) as you level.
 
-export type ObjectiveType = "ReachZone" | "InteractPart" | "EliminateCount" | "SurviveTime"
+export type ObjectiveType = "ReachZone" | "InteractPart" | "EliminateNPCCount" | "SurviveTime"
 
 export type Objective = {
 	Type: ObjectiveType,
 	ZoneTag: string?,
 	PartTag: string?,
-	TargetFaction: string?,
-	Count: number?,
-	DurationSeconds: number?,
+	BaseCount: number?,
+	BaseDurationSeconds: number?,
 	Description: string,
 }
 
 export type MissionDefinition = {
 	Id: string,
 	DisplayName: string,
-	Faction: string, -- which faction pool this mission is drawn for
-	Objectives: { Objective }, -- completed in order
-	RewardCredits: number,
-	RewardXP: number,
-	-- Minimum total players on the server for this mission to be eligible.
-	-- Defaults to 1 (solo-friendly) when omitted. EliminateCount missions need
-	-- actual hostile targets to exist, so they set this higher - see
-	-- MissionService.assignMissionToSquad, which filters the pool by this
-	-- against #Players:GetPlayers() before picking.
-	MinPlayers: number?,
+	ClassId: string, -- which class's pool this mission belongs to
+	Objectives: { Objective },
+	BaseRewardCredits: number,
+	BaseRewardXP: number,
 }
 
 local MissionConfig: { [string]: MissionDefinition } = {
 
+	-- ===== Class-D Personnel: unarmed errands, no combat =====
+	SupplyRun = {
+		Id = "SupplyRun",
+		DisplayName = "Supply Run",
+		ClassId = "DClass",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_Surface", Description = "Carry the supply crate to the surface elevator." },
+			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Bring the empty crate back to the cell block." },
+		},
+		BaseRewardCredits = 20,
+		BaseRewardXP = 40,
+	},
+	FileTheReport = {
+		Id = "FileTheReport",
+		DisplayName = "File The Incident Report",
+		ClassId = "DClass",
+		Objectives = {
+			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "File the incident report at the terminal." },
+		},
+		BaseRewardCredits = 15,
+		BaseRewardXP = 30,
+	},
+	LateShift = {
+		Id = "LateShift",
+		DisplayName = "Late Shift",
+		ClassId = "DClass",
+		Objectives = {
+			{ Type = "SurviveTime", BaseDurationSeconds = 90, Description = "Survive the late shift without incident." },
+		},
+		BaseRewardCredits = 20,
+		BaseRewardXP = 35,
+	},
+
+	-- ===== Scientist: still unarmed, more access =====
+	RecoverResearchData = {
+		Id = "RecoverResearchData",
+		DisplayName = "Recover Research Data",
+		ClassId = "Scientist",
+		Objectives = {
+			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Pull the research data from the terminal." },
+		},
+		BaseRewardCredits = 35,
+		BaseRewardXP = 70,
+	},
 	ContainTheBreach = {
 		Id = "ContainTheBreach",
 		DisplayName = "Contain The Breach",
-		Faction = "Foundation",
+		ClassId = "Scientist",
 		Objectives = {
 			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Reach the containment wing." },
 			{ Type = "InteractPart", PartTag = "Terminal_Containment", Description = "Lock down containment from the terminal." },
 		},
-		RewardCredits = 150,
-		RewardXP = 100,
+		BaseRewardCredits = 45,
+		BaseRewardXP = 90,
 	},
-
-	RecoverIntel = {
-		Id = "RecoverIntel",
-		DisplayName = "Recover Classified Intel",
-		Faction = "Foundation",
+	InventoryCheck = {
+		Id = "InventoryCheck",
+		DisplayName = "Armory Inventory Check",
+		ClassId = "Scientist",
 		Objectives = {
-			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Download the files from the intel terminal." },
+			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Count the armory stock." },
 		},
-		RewardCredits = 100,
-		RewardXP = 75,
+		BaseRewardCredits = 30,
+		BaseRewardXP = 60,
 	},
 
-	NeutralizeChaosCell = {
-		Id = "NeutralizeChaosCell",
-		DisplayName = "Neutralize Chaos Cell",
-		Faction = "Foundation",
+	-- ===== Guard: first armed class =====
+	NeutralizeIntruders = {
+		Id = "NeutralizeIntruders",
+		DisplayName = "Neutralize Intruders",
+		ClassId = "Guard",
 		Objectives = {
-			{ Type = "EliminateCount", TargetFaction = "ChaosInsurgency", Count = 3, Description = "Eliminate 3 Chaos Insurgency operatives." },
+			{ Type = "EliminateNPCCount", BaseCount = 3, Description = "Neutralize the intruders." },
 		},
-		RewardCredits = 175,
-		RewardXP = 125,
-		MinPlayers = 4,
+		BaseRewardCredits = 60,
+		BaseRewardXP = 120,
+	},
+	SecureTheArmory = {
+		Id = "SecureTheArmory",
+		DisplayName = "Secure The Armory",
+		ClassId = "Guard",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Secure the armory." },
+		},
+		BaseRewardCredits = 40,
+		BaseRewardXP = 80,
+	},
+	CellBlockPatrol = {
+		Id = "CellBlockPatrol",
+		DisplayName = "Cell Block Patrol",
+		ClassId = "Guard",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Patrol the cell block." },
+			{ Type = "EliminateNPCCount", BaseCount = 2, Description = "Put down the rioters." },
+		},
+		BaseRewardCredits = 65,
+		BaseRewardXP = 130,
 	},
 
-	LiberateClassD = {
-		Id = "LiberateClassD",
-		DisplayName = "Liberate Class-D",
-		Faction = "ChaosInsurgency",
+	-- ===== Chaos Renegade: rogue combat path =====
+	RaidTheArmory = {
+		Id = "RaidTheArmory",
+		DisplayName = "Raid The Armory",
+		ClassId = "ChaosRenegade",
 		Objectives = {
-			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Reach the Class-D holding cells." },
+			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Raid the armory." },
+		},
+		BaseRewardCredits = 55,
+		BaseRewardXP = 110,
+	},
+	EliminateFoundationPatrol = {
+		Id = "EliminateFoundationPatrol",
+		DisplayName = "Eliminate Foundation Patrol",
+		ClassId = "ChaosRenegade",
+		Objectives = {
+			{ Type = "EliminateNPCCount", BaseCount = 4, Description = "Eliminate the Foundation patrol." },
+		},
+		BaseRewardCredits = 80,
+		BaseRewardXP = 160,
+	},
+	FreeThePrisoners = {
+		Id = "FreeThePrisoners",
+		DisplayName = "Free The Prisoners",
+		ClassId = "ChaosRenegade",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_DClassCells", Description = "Reach the cell block." },
 			{ Type = "InteractPart", PartTag = "Terminal_CellRelease", Description = "Release the cell locks." },
 		},
-		RewardCredits = 150,
-		RewardXP = 100,
+		BaseRewardCredits = 70,
+		BaseRewardXP = 140,
 	},
 
-	SeizeArmory = {
-		Id = "SeizeArmory",
-		DisplayName = "Seize The Armory",
-		Faction = "ChaosInsurgency",
+	-- ===== MTF: heavy conventional combat =====
+	PurgeHostiles = {
+		Id = "PurgeHostiles",
+		DisplayName = "Purge Hostiles",
+		ClassId = "MTF",
 		Objectives = {
-			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Take control of the armory." },
+			{ Type = "EliminateNPCCount", BaseCount = 5, Description = "Purge all hostiles in the sector." },
 		},
-		RewardCredits = 120,
-		RewardXP = 80,
+		BaseRewardCredits = 100,
+		BaseRewardXP = 200,
+	},
+	RecoverClassifiedIntel = {
+		Id = "RecoverClassifiedIntel",
+		DisplayName = "Recover Classified Intel",
+		ClassId = "MTF",
+		Objectives = {
+			{ Type = "EliminateNPCCount", BaseCount = 3, Description = "Clear the guards off the terminal." },
+			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Download the classified intel." },
+		},
+		BaseRewardCredits = 110,
+		BaseRewardXP = 220,
+	},
+	ContainAndTerminate = {
+		Id = "ContainAndTerminate",
+		DisplayName = "Contain And Terminate",
+		ClassId = "MTF",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Reach the containment wing." },
+			{ Type = "EliminateNPCCount", BaseCount = 4, Description = "Terminate the breach." },
+		},
+		BaseRewardCredits = 115,
+		BaseRewardXP = 230,
 	},
 
-	EliminateCommand = {
-		Id = "EliminateCommand",
-		DisplayName = "Eliminate Foundation Command",
-		Faction = "ChaosInsurgency",
+	-- ===== Site Director: endgame Foundation =====
+	FullFacilitySweep = {
+		Id = "FullFacilitySweep",
+		DisplayName = "Full Facility Sweep",
+		ClassId = "SiteDirector",
 		Objectives = {
-			{ Type = "EliminateCount", TargetFaction = "Foundation", Count = 3, Description = "Eliminate 3 Foundation personnel." },
+			{ Type = "EliminateNPCCount", BaseCount = 8, Description = "Sweep the entire facility." },
 		},
-		RewardCredits = 175,
-		RewardXP = 125,
-		MinPlayers = 4,
+		BaseRewardCredits = 160,
+		BaseRewardXP = 320,
+	},
+	CommandOverride = {
+		Id = "CommandOverride",
+		DisplayName = "Command Override",
+		ClassId = "SiteDirector",
+		Objectives = {
+			{ Type = "InteractPart", PartTag = "Terminal_Containment", Description = "Override containment protocols." },
+			{ Type = "InteractPart", PartTag = "Terminal_Intel", Description = "Override the intel network." },
+		},
+		BaseRewardCredits = 140,
+		BaseRewardXP = 280,
+	},
+	TotalLockdownResponse = {
+		Id = "TotalLockdownResponse",
+		DisplayName = "Total Lockdown Response",
+		ClassId = "SiteDirector",
+		Objectives = {
+			{ Type = "EliminateNPCCount", BaseCount = 6, Description = "Respond to the lockdown." },
+			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Personally secure containment." },
+		},
+		BaseRewardCredits = 175,
+		BaseRewardXP = 350,
 	},
 
-	ReachTheSurface = {
-		Id = "ReachTheSurface",
-		DisplayName = "Reach The Surface",
-		Faction = "DClass",
+	-- ===== SCP-049: prestige =====
+	HuntTheLiving = {
+		Id = "HuntTheLiving",
+		DisplayName = "Hunt The Living",
+		ClassId = "SCP049",
 		Objectives = {
-			{ Type = "ReachZone", ZoneTag = "Zone_Surface", Description = "Escape through the surface elevator." },
+			{ Type = "EliminateNPCCount", BaseCount = 5, Description = "Find a cure for all of them." },
 		},
-		RewardCredits = 200,
-		RewardXP = 150,
+		BaseRewardCredits = 200,
+		BaseRewardXP = 400,
+	},
+	PurgeTheWing = {
+		Id = "PurgeTheWing",
+		DisplayName = "Purge The Wing",
+		ClassId = "SCP049",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Return to your wing." },
+			{ Type = "EliminateNPCCount", BaseCount = 7, Description = "Purge the wing of the Pestilence." },
+		},
+		BaseRewardCredits = 230,
+		BaseRewardXP = 460,
+	},
+	EndlessPlague = {
+		Id = "EndlessPlague",
+		DisplayName = "Endless Plague",
+		ClassId = "SCP049",
+		Objectives = {
+			{ Type = "SurviveTime", BaseDurationSeconds = 240, Description = "Outlast the outbreak." },
+		},
+		BaseRewardCredits = 210,
+		BaseRewardXP = 420,
 	},
 
-	SurviveTheNight = {
-		Id = "SurviveTheNight",
-		DisplayName = "Survive",
-		Faction = "DClass",
+	-- ===== SCP-106: prestige, hardest tier =====
+	CorrodeTheFoundation = {
+		Id = "CorrodeTheFoundation",
+		DisplayName = "Corrode The Foundation",
+		ClassId = "SCP106",
 		Objectives = {
-			{ Type = "SurviveTime", DurationSeconds = 600, Description = "Stay alive for 10 minutes." },
+			{ Type = "EliminateNPCCount", BaseCount = 6, Description = "Corrode everything in your path." },
 		},
-		RewardCredits = 100,
-		RewardXP = 90,
+		BaseRewardCredits = 260,
+		BaseRewardXP = 520,
+	},
+	VanishAndReturn = {
+		Id = "VanishAndReturn",
+		DisplayName = "Vanish And Return",
+		ClassId = "SCP106",
+		Objectives = {
+			{ Type = "ReachZone", ZoneTag = "Zone_Armory", Description = "Phase into the armory." },
+			{ Type = "ReachZone", ZoneTag = "Zone_SCPContainment", Description = "Phase back to containment." },
+		},
+		BaseRewardCredits = 240,
+		BaseRewardXP = 480,
+	},
+	TheOldMansHunt = {
+		Id = "TheOldMansHunt",
+		DisplayName = "The Old Man's Hunt",
+		ClassId = "SCP106",
+		Objectives = {
+			{ Type = "EliminateNPCCount", BaseCount = 9, Description = "There is no corner of the facility you cannot reach." },
+		},
+		BaseRewardCredits = 300,
+		BaseRewardXP = 600,
 	},
 }
 
-MissionConfig._PoolByFaction = {
-	Foundation = { "ContainTheBreach", "RecoverIntel", "NeutralizeChaosCell" },
-	ChaosInsurgency = { "LiberateClassD", "SeizeArmory", "EliminateCommand" },
-	DClass = { "ReachTheSurface", "SurviveTheNight" },
+MissionConfig._PoolByClass = {
+	DClass = { "SupplyRun", "FileTheReport", "LateShift" },
+	Scientist = { "RecoverResearchData", "ContainTheBreach", "InventoryCheck" },
+	Guard = { "NeutralizeIntruders", "SecureTheArmory", "CellBlockPatrol" },
+	ChaosRenegade = { "RaidTheArmory", "EliminateFoundationPatrol", "FreeThePrisoners" },
+	MTF = { "PurgeHostiles", "RecoverClassifiedIntel", "ContainAndTerminate" },
+	SiteDirector = { "FullFacilitySweep", "CommandOverride", "TotalLockdownResponse" },
+	SCP049 = { "HuntTheLiving", "PurgeTheWing", "EndlessPlague" },
+	SCP106 = { "CorrodeTheFoundation", "VanishAndReturn", "TheOldMansHunt" },
 }
 
 return MissionConfig
@@ -422,40 +576,27 @@ return MissionConfig
 <Item class="ModuleScript" referent="RBX000009"><Properties>
 <string name="Name">SCPConfig</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Ability tuning for each SCP. Consumed exclusively by SCPAbilityService (server-authoritative);
--- the client only ever reads this to draw cooldown UI, never to decide outcomes.
-
-export type SCP173Config = {
-	LungeRange: number,
-	LungeDamage: number,
-	ObserverConeDegrees: number,
-	ObserverMaxDistance: number,
-	MoveSpeedWhenUnobserved: number,
-	NeckSnapCooldown: number,
-}
+-- Ability tuning for the two prestige SCP classes. Consumed exclusively by
+-- SCPAbilityService (server-authoritative); the client only ever reads this
+-- to draw cooldown UI, never to decide outcomes.
+--
+-- SCP-173 and SCP-096 aren't here: both of their signature mechanics
+-- (freezing when observed, enraging when its face is seen) only make sense
+-- with another human in the room to do the observing. In a solo game there's
+-- nobody to fill that role, so they're cut rather than shipped as a
+-- confusing no-op class. SCP-049 and SCP-106 both work solo since their kit
+-- is "hunt down hostiles with unique abilities," same as any other class.
 
 export type SCP049Config = {
 	TouchOfDeathRange: number,
 	TouchOfDeathCooldown: number,
 	TouchOfDeathDamage: number,
 	ReanimateRange: number,
-	ReanimateWindowSeconds: number, -- how long after death the corpse can still be reanimated
+	ReanimateWindowSeconds: number, -- how long after death a corpse can still be reanimated
 	ZombieWalkSpeed: number,
 	ZombieMaxHealth: number,
 	ZombieBiteDamage: number,
 	ZombieBiteCooldown: number,
-}
-
-export type SCP096Config = {
-	ViewConeDegrees: number,
-	ViewMaxDistance: number,
-	CalmToEnrageDelaySeconds: number,
-	EnrageWalkSpeed: number,
-	EnrageDurationSeconds: number,
-	SwipeDamage: number,
-	SwipeRange: number,
-	SwipeCooldown: number,
-	PostEnrageCryDurationSeconds: number,
 }
 
 export type SCP106Config = {
@@ -469,15 +610,6 @@ export type SCP106Config = {
 }
 
 local SCPConfig = {
-	SCP173 = {
-		LungeRange = 8,
-		LungeDamage = 9999, -- instant kill on unobstructed contact, matches SL canon
-		ObserverConeDegrees = 100,
-		ObserverMaxDistance = 90,
-		MoveSpeedWhenUnobserved = 40,
-		NeckSnapCooldown = 0.5,
-	} :: SCP173Config,
-
 	SCP049 = {
 		TouchOfDeathRange = 6,
 		TouchOfDeathCooldown = 3,
@@ -489,18 +621,6 @@ local SCPConfig = {
 		ZombieBiteDamage = 35,
 		ZombieBiteCooldown = 1.5,
 	} :: SCP049Config,
-
-	SCP096 = {
-		ViewConeDegrees = 60,
-		ViewMaxDistance = 60,
-		CalmToEnrageDelaySeconds = 2.5,
-		EnrageWalkSpeed = 42,
-		EnrageDurationSeconds = 20,
-		SwipeDamage = 85,
-		SwipeRange = 7,
-		SwipeCooldown = 0.8,
-		PostEnrageCryDurationSeconds = 4,
-	} :: SCP096Config,
 
 	SCP106 = {
 		CorrodeDamagePerTick = 6,
@@ -620,41 +740,6 @@ return ToolConfig
 </Item>
 <Item class="Folder" referent="RBX000011"><Properties><string name="Name">Modules</string></Properties>
 <Item class="ModuleScript" referent="RBX000012"><Properties>
-<string name="Name">Enums</string>
-<ProtectedString name="Source"><![CDATA[--!strict
--- String-constant "enums" shared by server and client so nobody typos a magic string.
-
-local Enums = {}
-
-Enums.RoundState = {
-	Lobby = "Lobby",
-	Intermission = "Intermission",
-	Active = "Active",
-	Ending = "Ending",
-}
-
-Enums.Faction = {
-	DClass = "DClass",
-	Foundation = "Foundation",
-	ChaosInsurgency = "ChaosInsurgency",
-	SCP = "SCP",
-	Spectator = "Spectator",
-}
-
-Enums.RoundEndReason = {
-	FoundationVictory = "FoundationVictory",
-	ChaosVictory = "ChaosVictory",
-	SCPVictory = "SCPVictory",
-	TimeLimit = "TimeLimit",
-	NotEnoughPlayers = "NotEnoughPlayers",
-	Warhead = "Warhead",
-}
-
-return Enums
-]]></ProtectedString>
-</Properties>
-</Item>
-<Item class="ModuleScript" referent="RBX000013"><Properties>
 <string name="Name">Signal</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Minimal pure-Lua signal (GoodSignal-style). No BindableEvent overhead,
@@ -707,7 +792,7 @@ return Signal
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000014"><Properties>
+<Item class="ModuleScript" referent="RBX000013"><Properties>
 <string name="Name">Trove</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Small cleanup-tracking utility. Add() anything with a :Destroy()/:Disconnect()
@@ -767,8 +852,8 @@ return Trove
 </Properties>
 </Item>
 </Item>
-<Item class="Folder" referent="RBX000015"><Properties><string name="Name">Remotes</string></Properties>
-<Item class="ModuleScript" referent="RBX000016"><Properties>
+<Item class="Folder" referent="RBX000014"><Properties><string name="Name">Remotes</string></Properties>
+<Item class="ModuleScript" referent="RBX000015"><Properties>
 <string name="Name">Remotes</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Central registry of every RemoteEvent/RemoteFunction. The server creates the
@@ -781,10 +866,10 @@ local RunService = game:GetService("RunService")
 local folder = script.Parent :: Folder
 
 local EVENT_NAMES = {
-	"ClassAssigned", -- server -> client: { classId, spawnCFrame }
-	"RoundStateChanged", -- server -> client: { state, payload }
-	"MissionAssigned", -- server -> client: { missionId, squadId }
-	"MissionProgress", -- server -> client: { missionId, objectiveIndex, complete }
+	"ClassAssigned", -- server -> client: { classId, displayName, description, track, isSCP }
+	"RequestClassChange", -- client -> server: { classId }
+	"MissionAssigned", -- server -> client: { missionId, displayName, objectiveText, objectiveIndex, objectiveCount }
+	"MissionProgress", -- server -> client: { missionId, objectiveIndex, objectiveText, complete }
 	"WeaponFire", -- client -> server: { toolId, origin, direction }
 	"WeaponReload", -- client -> server: { toolId }
 	"UseConsumable", -- client -> server: { toolId }
@@ -794,8 +879,7 @@ local EVENT_NAMES = {
 	"SCPAbility", -- client -> server: { ability, ... }
 	"SCPAbilityCooldown", -- server -> client: { ability, duration }
 	"Notify", -- server -> client: { text, kind }
-	"WarheadUpdate", -- server -> client: { active, timeLeft }
-	"InventoryUpdated", -- server -> client: { equipped, ammo }
+	"InventoryUpdated", -- server -> client: { equipped, ammo, reserve }
 }
 
 local FUNCTION_NAMES = {
@@ -837,16 +921,16 @@ return Remotes
 </Item>
 </Item>
 </Item>
-<Item class="ServerScriptService" referent="RBX000017"><Properties><string name="Name">ServerScriptService</string></Properties>
-<Item class="Folder" referent="RBX000018"><Properties><string name="Name">Server</string></Properties>
-<Item class="Folder" referent="RBX000019"><Properties><string name="Name">Admin</string></Properties>
-<Item class="ModuleScript" referent="RBX000020"><Properties>
+<Item class="ServerScriptService" referent="RBX000016"><Properties><string name="Name">ServerScriptService</string></Properties>
+<Item class="Folder" referent="RBX000017"><Properties><string name="Name">Server</string></Properties>
+<Item class="Folder" referent="RBX000018"><Properties><string name="Name">Admin</string></Properties>
+<Item class="ModuleScript" referent="RBX000019"><Properties>
 <string name="Name">AdminCommands</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Minimal chat-command admin panel for testing/moderation. The round itself
--- never needs these (see RoundService for the fully automatic loop) - they
--- exist purely so a developer or trusted moderator can nudge things along
--- without republishing the place.
+-- Minimal chat-command admin panel for testing/moderation. The game itself
+-- never needs these (spawning, missions, and leveling all run automatically -
+-- see SessionService) - they exist purely so a developer can jump straight to
+-- a given level/class to test progression without grinding for real.
 
 local Players = game:GetService("Players")
 
@@ -884,17 +968,8 @@ local function findPlayerByName(partialName: string): Player?
 end
 
 local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
-	forcestart = function(caller)
-		Deps.RoundService.ForceStartIntermission()
-		Deps.NotifyService.Toast(caller, "Forced intermission start.", "success")
-	end,
-
-	endround = function(caller, args)
-		local reason = args[1] or "FoundationVictory"
-		Deps.RoundService.ForceEndRound(reason)
-		Deps.NotifyService.Toast(caller, `Forced round end: {reason}`, "success")
-	end,
-
+	-- Bypasses the level gate entirely (unlike the in-game class menu) so you
+	-- can test any class's kit immediately. Persists like a normal pick.
 	setclass = function(caller, args)
 		local target = args[1] and findPlayerByName(args[1])
 		local classId = args[2]
@@ -902,7 +977,9 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 			Deps.NotifyService.Toast(caller, "Usage: /setclass <player> <classId>", "warning")
 			return
 		end
+		Deps.DataService.SetCurrentClass(target, classId)
 		Deps.ClassService.SpawnCharacterForClass(target, classId)
+		Deps.MissionService.OnClassChanged(target, classId)
 		Deps.NotifyService.Toast(caller, `Set {target.Name} to {classId}.`, "success")
 	end,
 
@@ -915,6 +992,18 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 		end
 		Deps.DataService.AddCredits(target, amount)
 		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} credits.`, "success")
+	end,
+
+	addxp = function(caller, args)
+		local target = args[1] and findPlayerByName(args[1])
+		local amount = args[2] and tonumber(args[2])
+		if not target or not amount then
+			Deps.NotifyService.Toast(caller, "Usage: /addxp <player> <amount>", "warning")
+			return
+		end
+		Deps.DataService.AddXP(target, amount)
+		local profile = Deps.DataService.GetProfile(target)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} XP (now level {profile and profile.Level or "?"}).`, "success")
 	end,
 }
 
@@ -953,8 +1042,8 @@ return AdminCommands
 </Properties>
 </Item>
 </Item>
-<Item class="Folder" referent="RBX000021"><Properties><string name="Name">Data</string></Properties>
-<Item class="ModuleScript" referent="RBX000022"><Properties>
+<Item class="Folder" referent="RBX000020"><Properties><string name="Name">Data</string></Properties>
+<Item class="ModuleScript" referent="RBX000021"><Properties>
 <string name="Name">ProfileTemplate</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Shape of a player's persisted profile. DataService fills in this template for
@@ -967,9 +1056,9 @@ export type Profile = {
 	Kills: number,
 	Deaths: number,
 	MissionsCompleted: number,
-	RoundsPlayed: number,
-	SCPKills: number, -- kills recorded while playing an SCP class
-	Escapes: number, -- successful D-Class "reach the surface" completions
+	SCPKills: number, -- kills recorded while playing an SCP prestige class
+	Escapes: number, -- flavor stat: "reach the surface"-style objective completions
+	CurrentClassId: string, -- persists across sessions so you resume as whatever you last picked
 	SchemaVersion: number,
 }
 
@@ -980,10 +1069,10 @@ local ProfileTemplate: Profile = {
 	Kills = 0,
 	Deaths = 0,
 	MissionsCompleted = 0,
-	RoundsPlayed = 0,
 	SCPKills = 0,
 	Escapes = 0,
-	SchemaVersion = 1,
+	CurrentClassId = "DClass",
+	SchemaVersion = 2,
 }
 
 return ProfileTemplate
@@ -991,14 +1080,14 @@ return ProfileTemplate
 </Properties>
 </Item>
 </Item>
-<Item class="Script" referent="RBX000023"><Properties>
+<Item class="Script" referent="RBX000022"><Properties>
 <string name="Name">Main</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Server bootstrap. Requires every service exactly once, wires them together
 -- through a shared "Deps" locator (so services never require each other and
 -- can't deadlock on circular requires), then calls Init on each in dependency
--- order. RoundService.Init runs last because it immediately starts checking
--- whether the round should begin, which touches everything else.
+-- order. SessionService.Init runs last because it immediately spawns anyone
+-- whose profile has already loaded, which touches everything else.
 
 local Players = game:GetService("Players")
 
@@ -1022,9 +1111,10 @@ local CombatService = require(Services.CombatService)
 local KeycardService = require(Services.KeycardService)
 local DoorService = require(Services.DoorService)
 local SCPAbilityService = require(Services.SCPAbilityService)
+local NPCService = require(Services.NPCService)
 local MissionService = require(Services.MissionService)
-local RoundService = require(Services.RoundService)
 local AdminCommands = require(Admin.AdminCommands)
+local SessionService = require(Services.SessionService)
 
 local Deps = {
 	LoggingService = LoggingService,
@@ -1037,9 +1127,10 @@ local Deps = {
 	KeycardService = KeycardService,
 	DoorService = DoorService,
 	SCPAbilityService = SCPAbilityService,
+	NPCService = NPCService,
 	MissionService = MissionService,
-	RoundService = RoundService,
 	AdminCommands = AdminCommands,
+	SessionService = SessionService,
 }
 
 local INIT_ORDER = {
@@ -1053,9 +1144,10 @@ local INIT_ORDER = {
 	KeycardService,
 	DoorService,
 	SCPAbilityService,
+	NPCService,
 	MissionService,
 	AdminCommands,
-	RoundService, -- last: kicks off the Lobby/Intermission loop
+	SessionService, -- last: spawns players once everything else is ready
 }
 
 for _, service in ipairs(INIT_ORDER) do
@@ -1069,18 +1161,17 @@ LoggingService.Info("SCP Foundation: Chronicles server booted.")
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000024"><Properties>
+<Item class="ModuleScript" referent="RBX000023"><Properties>
 <string name="Name">MapScaffold</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Generates a minimal, ugly-but-functional placeholder facility at server
--- boot: one spawn pad per class, the mission zones/terminals MissionConfig
--- references, a couple of access-gated doors, and a warhead panel. This
--- means the whole game (round loop, classes, missions, combat, SCP
--- abilities) is testable the moment you hit Play, with zero manual map
--- setup. Replace this with a real Studio-built map by tagging your own
--- geometry with the same CollectionService tags and deleting this script's
--- call in Main.server.lua - every other service only ever looks at tags,
--- never at this generated geometry directly.
+-- boot: one spawn pad per class and the mission zones/terminals
+-- MissionConfig references. This means the whole game (classes, missions,
+-- combat, SCP abilities, leveling) is testable the moment you hit Play, with
+-- zero manual map setup. Replace this with a real Studio-built map by
+-- tagging your own geometry with the same CollectionService tags and
+-- deleting this script's call in Main.server.lua - every other service only
+-- ever looks at tags, never at this generated geometry directly.
 
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
@@ -1220,24 +1311,14 @@ function MapScaffold.Build()
 	doorsFolder.Parent = root
 	makeDoor("Door_Checkpoint", Vector3.new(20, 4, -100), 3).Parent = doorsFolder
 	makeDoor("Door_CellBlock", Vector3.new(-170, 4, -20), 1, "CellDoor").Parent = doorsFolder
-
-	local warheadPanel = makePart({
-		Name = "WarheadPanel",
-		Size = Vector3.new(3, 3, 1),
-		Position = Vector3.new(0, 2, 0),
-		Color = Color3.fromRGB(220, 40, 40),
-		Material = Enum.Material.Neon,
-	})
-	CollectionService:AddTag(warheadPanel, "WarheadPanel")
-	warheadPanel.Parent = root
 end
 
 return MapScaffold
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="Folder" referent="RBX000025"><Properties><string name="Name">Services</string></Properties>
-<Item class="ModuleScript" referent="RBX000026"><Properties>
+<Item class="Folder" referent="RBX000024"><Properties><string name="Name">Services</string></Properties>
+<Item class="ModuleScript" referent="RBX000025"><Properties>
 <string name="Name">AntiExploitService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Generic remote-abuse guard. Every RemoteEvent handler that trusts client
@@ -1297,12 +1378,12 @@ return AntiExploitService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000027"><Properties>
+<Item class="ModuleScript" referent="RBX000026"><Properties>
 <string name="Name">ClassService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Assigns every player a class (SCP:SL calls these "roles"), spawns their
--- character at the right tagged location with the right stats/tools, and
--- tracks who is alive per faction so RoundService can evaluate win conditions.
+-- Owns the solo player's current class: spawning them with the right stats/
+-- tools at the right tagged location, gating class changes behind
+-- profile.Level (see ClassConfig.UnlockLevel), and handling death/respawn.
 --
 -- Services never require each other directly (avoids ModuleScript require
 -- cycles). Main.server.lua requires every service once and calls Init(deps)
@@ -1316,7 +1397,6 @@ local Workspace = game:GetService("Workspace")
 
 local ClassConfig = require(ReplicatedStorage.Shared.Config.ClassConfig)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local Enums = require(ReplicatedStorage.Shared.Modules.Enums)
 local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
 
 local ClassService = {}
@@ -1327,10 +1407,11 @@ corpsesFolder.Parent = Workspace
 
 --- Clones a just-died character into a standalone, anchored "Corpse" model so
 --- it survives the original character being destroyed by the respawn a moment
---- later. SCPAbilityService's SCP-049 Reanimate reads these via CollectionService.
-local function spawnCorpse(player: Player, character: Model)
+--- later. SCPAbilityService's SCP-049 Reanimate reads these via CollectionService
+--- (both player corpses and NPC corpses NPCService creates the same way).
+local function spawnCorpse(ownerName: string, ownerUserId: number, character: Model)
 	local clone = character:Clone()
-	clone.Name = `Corpse_{player.Name}`
+	clone.Name = `Corpse_{ownerName}`
 
 	local humanoid = clone:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -1346,8 +1427,8 @@ local function spawnCorpse(player: Player, character: Model)
 		end
 	end
 
-	clone:SetAttribute("OwnerUserId", player.UserId)
-	clone:SetAttribute("OwnerName", player.Name)
+	clone:SetAttribute("OwnerUserId", ownerUserId)
+	clone:SetAttribute("OwnerName", ownerName)
 	clone:SetAttribute("DiedAt", os.clock())
 	clone:SetAttribute("Reanimated", false)
 	CollectionService:AddTag(clone, "Corpse")
@@ -1370,16 +1451,6 @@ local Deps: any = nil
 
 local playerClass: { [Player]: string } = {}
 local aliveState: { [Player]: boolean } = {}
-local spectatorQueue: { Player } = {} -- FIFO, players waiting for a reinforcement wave
-
-local function shuffled<T>(list: { T }): { T }
-	local copy = table.clone(list)
-	for i = #copy, 2, -1 do
-		local j = math.random(1, i)
-		copy[i], copy[j] = copy[j], copy[i]
-	end
-	return copy
-end
 
 local function getSpawnPart(spawnTag: string): BasePart?
 	local tagged = CollectionService:GetTagged(spawnTag)
@@ -1396,104 +1467,25 @@ local function getSpawnPart(spawnTag: string): BasePart?
 	return parts[math.random(1, #parts)]
 end
 
---- Builds a weighted roster for the players present at round start.
---- Returns a map of player -> classId. SCPs are chosen first (fixed order so
---- SCP-173 is always in play), remaining players split across the classes
---- available from t=0 (DClass/Scientist/Guard) proportional to RosterWeight.
-function ClassService.BuildInitialRoster(players: { Player }): { [Player]: string }
-	local roster: { [Player]: string } = {}
-	local pool = shuffled(players)
-	local n = #pool
-
-	-- Below 2 players there's nobody for an SCP to hunt (or be hunted by), so
-	-- a solo tester gets a normal human class instead of always drawing the
-	-- same lonely monster.
-	local scpOrder = ClassConfig._SCPActivationOrder :: { string }
-	local scpCount = if n < 2 then 0 else math.clamp(math.floor(n / 5), 1, #scpOrder)
-
-	for i = 1, scpCount do
-		local player = table.remove(pool) :: Player
-		roster[player] = scpOrder[i]
-	end
-
-	local humanClassIds = { "DClass", "Scientist", "Guard" }
-	local totalWeight = 0
-	for _, id in ipairs(humanClassIds) do
-		totalWeight += ClassConfig[id].RosterWeight
-	end
-
-	local remaining = #pool
-	local counts: { [string]: number } = {}
-	local assignedSoFar = 0
-	for i, id in ipairs(humanClassIds) do
-		if i == #humanClassIds then
-			counts[id] = remaining - assignedSoFar
-		else
-			local share = math.floor(remaining * (ClassConfig[id].RosterWeight / totalWeight) + 0.5)
-			counts[id] = share
-			assignedSoFar += share
-		end
-	end
-
-	for _, id in ipairs(humanClassIds) do
-		for _ = 1, counts[id] or 0 do
-			local player = table.remove(pool)
-			if not player then
-				break
-			end
-			roster[player] = id
-		end
-	end
-
-	-- Leftover due to rounding (shouldn't normally happen) defaults to DClass.
-	for _, player in ipairs(pool) do
-		roster[player] = "DClass"
-	end
-
-	return roster
-end
-
 function ClassService.GetPlayerClass(player: Player): string?
 	return playerClass[player]
-end
-
-function ClassService.GetPlayerFaction(player: Player): string?
-	local classId = playerClass[player]
-	if not classId then
-		return nil
-	end
-	local def = ClassConfig[classId]
-	return def and def.Faction or nil
 end
 
 function ClassService.IsAlive(player: Player): boolean
 	return aliveState[player] == true
 end
 
-function ClassService.GetAlivePlayersByFaction(faction: string): { Player }
-	local list = {}
-	for player, isAlive in pairs(aliveState) do
-		if isAlive and ClassService.GetPlayerFaction(player) == faction then
-			table.insert(list, player)
+--- Every class whose UnlockLevel the player's profile has already met.
+function ClassService.GetUnlockedClassIds(player: Player): { string }
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	local unlocked = {}
+	for _, classId in ipairs(ClassConfig._UnlockOrder) do
+		if level >= ClassConfig[classId].UnlockLevel then
+			table.insert(unlocked, classId)
 		end
 	end
-	return list
-end
-
-function ClassService.GetAliveCountByFaction(faction: string): number
-	return #ClassService.GetAlivePlayersByFaction(faction)
-end
-
-function ClassService.GetSpectatorQueue(): { Player }
-	return table.clone(spectatorQueue)
-end
-
-function ClassService.PopFromSpectatorQueue(count: number): { Player }
-	local popped = {}
-	while #popped < count and #spectatorQueue > 0 do
-		table.insert(popped, table.remove(spectatorQueue, 1))
-	end
-	return popped
+	return unlocked
 end
 
 local function applyHumanoidStats(character: Model, classId: string)
@@ -1556,9 +1548,32 @@ function ClassService.SpawnCharacterForClass(player: Player, classId: string)
 		classId = classId,
 		displayName = def.DisplayName,
 		description = def.Description,
-		faction = def.Faction,
+		track = def.Track,
 		isSCP = def.IsSCP,
 	})
+end
+
+--- Server-validated class change, called from the class-change terminal /
+--- menu. Silently refuses (with a toast) if the level requirement isn't met.
+function ClassService.RequestClassChange(player: Player, classId: string)
+	local def = ClassConfig[classId]
+	if not def then
+		return
+	end
+
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	if level < def.UnlockLevel then
+		Deps.NotifyService.Toast(player, `Requires level {def.UnlockLevel} ({def.DisplayName}). You are level {level}.`, "warning")
+		return
+	end
+
+	Deps.DataService.SetCurrentClass(player, classId)
+	ClassService.SpawnCharacterForClass(player, classId)
+	if Deps.MissionService then
+		Deps.MissionService.OnClassChanged(player, classId)
+	end
+	Deps.NotifyService.Toast(player, `You are now: {def.DisplayName}`, "success")
 end
 
 function ClassService._OnCharacterDied(player: Player)
@@ -1569,105 +1584,44 @@ function ClassService._OnCharacterDied(player: Player)
 
 	if Deps.DataService then
 		Deps.DataService.IncrementStat(player, "Deaths", 1)
+		Deps.DataService.AddCredits(player, -GameConfig.DeathCreditPenalty)
 	end
 
 	local character = player.Character
 	if character then
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid and Deps.CombatService then
-			local killer = Deps.CombatService.GetLastAttacker(humanoid)
-			if killer and killer ~= player and killer.Parent then
-				if Deps.DataService then
-					Deps.DataService.IncrementStat(killer, "Kills", 1)
-					Deps.DataService.AddCredits(killer, 15)
-					local killerClassId = playerClass[killer]
-					if killerClassId and ClassConfig[killerClassId] and ClassConfig[killerClassId].IsSCP then
-						Deps.DataService.IncrementStat(killer, "SCPKills", 1)
-					end
-				end
-				if Deps.MissionService then
-					Deps.MissionService.NotifyKill(killer, player)
-				end
-			end
 			Deps.CombatService.ClearAttribution(humanoid)
 		end
-		spawnCorpse(player, character)
+		spawnCorpse(player.Name, player.UserId, character)
 	end
 
-	table.insert(spectatorQueue, player)
+	Deps.NotifyService.Toast(player, `You died. Respawning in {GameConfig.RespawnDelaySeconds}s (-{GameConfig.DeathCreditPenalty} credits).`, "danger")
 
-	if Deps.RoundService then
-		Deps.RoundService.NotifyPlayerDied(player)
-	end
-
-	task.delay(2, function()
+	task.delay(GameConfig.RespawnDelaySeconds, function()
 		if player.Parent and not aliveState[player] then
-			ClassService._BecomeSpectator(player, "You died. Watch the round finish, or wait for a reinforcement wave.")
+			local classId = playerClass[player] or "DClass"
+			ClassService.SpawnCharacterForClass(player, classId)
 		end
 	end)
-end
-
---- Turns a player into a free-noclip ghost: invisible, non-colliding, fast.
---- Used both a beat after death and immediately for players who join mid-round.
-function ClassService._BecomeSpectator(player: Player, description: string)
-	playerClass[player] = "Spectator"
-	player:LoadCharacter()
-	local character = player.Character
-	if character then
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			humanoid.WalkSpeed = GameConfig.SpectatorWalkSpeed
-			humanoid.PlatformStand = false
-		end
-		for _, part in ipairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-				part.Transparency = 1
-			elseif part:IsA("Decal") then
-				part.Transparency = 1
-			end
-		end
-	end
-	Remotes.ClassAssigned:FireClient(player, {
-		classId = "Spectator",
-		displayName = "Spectator",
-		description = description,
-		faction = Enums.Faction.Spectator,
-		isSCP = false,
-	})
-end
-
---- For players who join while a round is already Active: they can't be
---- slotted into a live roster, so they spectate and queue for the next
---- reinforcement wave (or the next round's roster, whichever comes first).
-function ClassService.EnterSpectator(player: Player)
-	aliveState[player] = false
-	if not table.find(spectatorQueue, player) then
-		table.insert(spectatorQueue, player)
-	end
-	ClassService._BecomeSpectator(player, "The round is already underway. Wait for a reinforcement wave or the next round.")
-end
-
-function ClassService.ResetForNewRound()
-	table.clear(playerClass)
-	table.clear(aliveState)
-	table.clear(spectatorQueue)
-	ClassService.ClearCorpses()
-	if Deps and Deps.SCPAbilityService then
-		Deps.SCPAbilityService.ResetForNewRound()
-	end
 end
 
 function ClassService.Init(deps: any)
 	Deps = deps
 
+	Remotes.RequestClassChange.OnServerEvent:Connect(function(player: Player, payload: any)
+		if typeof(payload) ~= "table" or typeof(payload.classId) ~= "string" then
+			return
+		end
+		if not Deps.AntiExploitService.CheckRate(player, "RequestClassChange", 1) then
+			return
+		end
+		ClassService.RequestClassChange(player, payload.classId)
+	end)
+
 	Players.PlayerRemoving:Connect(function(player)
 		playerClass[player] = nil
 		aliveState[player] = nil
-		local idx = table.find(spectatorQueue, player)
-		if idx then
-			table.remove(spectatorQueue, idx)
-		end
 	end)
 end
 
@@ -1675,7 +1629,7 @@ return ClassService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000028"><Properties>
+<Item class="ModuleScript" referent="RBX000027"><Properties>
 <string name="Name">CombatService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Server-authoritative combat: every shot, reload, heal and flashlight toggle
@@ -1684,7 +1638,6 @@ return ClassService
 -- actually happens. Also the single choke point ("ApplyDamage") that SCP
 -- abilities route through, so kill attribution works the same everywhere.
 
-local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -1696,17 +1649,11 @@ local CombatService = {}
 local Deps: any = nil
 
 -- Humanoid -> { player: Player, time: number }. Used for kill attribution by
--- ClassService when Humanoid.Died fires, and by MissionService for EliminateCount.
+-- ClassService when Humanoid.Died fires, and by MissionService/NPCService for
+-- crediting EliminateNPCCount progress to whoever landed the killing blow.
 local lastDamager: { [Humanoid]: { player: Player, time: number } } = {}
 
 local ATTRIBUTION_WINDOW_SECONDS = 12
-
-local function isHostile(factionA: string?, factionB: string?): boolean
-	if factionA == nil or factionB == nil then
-		return true
-	end
-	return factionA ~= factionB
-end
 
 function CombatService.ApplyDamage(attacker: Player?, targetHumanoid: Humanoid, damage: number)
 	if targetHumanoid.Health <= 0 then
@@ -1801,15 +1748,10 @@ local function onWeaponFire(player: Player, payload: any)
 		return
 	end
 
-	local hitPlayer = Players:GetPlayerFromCharacter(hitCharacter)
-	if hitPlayer then
-		local attackerFaction = Deps.ClassService.GetPlayerFaction(player)
-		local victimFaction = Deps.ClassService.GetPlayerFaction(hitPlayer)
-		if not isHostile(attackerFaction, victimFaction) then
-			return
-		end
-	end
-
+	-- No faction/friendly-fire check needed: this is a solo game, so anything
+	-- hit that isn't the shooter's own character (already excluded from the
+	-- raycast above) is fair game, whether it's an NPC or, in a multi-client
+	-- test session, another player's character.
 	local damage = def.Damage :: number
 	if result.Instance.Name == "Head" then
 		damage *= 1.75
@@ -1923,7 +1865,7 @@ return CombatService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000029"><Properties>
+<Item class="ModuleScript" referent="RBX000028"><Properties>
 <string name="Name">DataService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Owns all player persistence: DataStore load/save, leaderstats, and the
@@ -1938,6 +1880,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ProfileTemplate = require(script.Parent.Parent.Data.ProfileTemplate)
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 
 type Profile = ProfileTemplate.Profile
@@ -1987,7 +1930,7 @@ local function mergeMissingKeys(profile: { [string]: any }, template: { [string]
 end
 
 local function xpRequiredForLevel(level: number): number
-	return 100 * level
+	return math.floor(GameConfig.XPCurveBase * level ^ GameConfig.XPCurveExponent)
 end
 
 local function recomputeLevel(profile: Profile)
@@ -2123,6 +2066,14 @@ function DataService.AddXP(player: Player, amount: number)
 	syncLeaderstats(player, profile)
 end
 
+function DataService.SetCurrentClass(player: Player, classId: string)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	profile.CurrentClassId = classId
+end
+
 function DataService.IncrementStat(player: Player, statName: string, amount: number?)
 	local profile = profiles[player]
 	if not profile then
@@ -2167,7 +2118,7 @@ return DataService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000030"><Properties>
+<Item class="ModuleScript" referent="RBX000029"><Properties>
 <string name="Name">DoorService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Drives every access-controlled door in the facility. Map builders just need
@@ -2329,7 +2280,7 @@ return DoorService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000031"><Properties>
+<Item class="ModuleScript" referent="RBX000030"><Properties>
 <string name="Name">InventoryService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Builds Tool instances at runtime from ToolConfig and hands them to players.
@@ -2432,7 +2383,7 @@ return InventoryService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000032"><Properties>
+<Item class="ModuleScript" referent="RBX000031"><Properties>
 <string name="Name">KeycardService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Keycard levels are derived from a player's class (see ClassConfig.KeycardLevel)
@@ -2467,7 +2418,7 @@ return KeycardService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000033"><Properties>
+<Item class="ModuleScript" referent="RBX000032"><Properties>
 <string name="Name">LoggingService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Thin, leveled wrapper around print/warn. Exists so every service logs the
@@ -2494,13 +2445,15 @@ return LoggingService
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000034"><Properties>
+<Item class="ModuleScript" referent="RBX000033"><Properties>
 <string name="Name">MissionService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Groups players into squads (see GameConfig.SquadSize) and runs the mission
--- board: assigns each squad an objective chain from MissionConfig, tracks
--- progress against world geometry (tagged zones/terminals) and kills, pays
--- out rewards, then loops a fresh mission so there is always something to do.
+-- Runs the solo mission board: draws missions for the player's current class
+-- from a shuffled "bag" (no repeats until every mission in the pool has come
+-- up once, so you keep grinding the same small pool without ever getting the
+-- exact same mission twice in a row), scales objective counts/durations/
+-- rewards up with level, and tracks progress against world geometry (tagged
+-- zones/terminals) or spawned NPCs.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -2513,267 +2466,239 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
 type Objective = MissionConfig.Objective
 type MissionDefinition = MissionConfig.MissionDefinition
 
-type Squad = {
-	id: number,
-	faction: string,
-	members: { Player },
+type LiveObjective = {
+	Type: string,
+	ZoneTag: string?,
+	PartTag: string?,
+	Count: number?,
+	DurationSeconds: number?,
+	Description: string,
+}
+
+type PlayerState = {
+	classId: string,
 	missionDef: MissionDefinition?,
+	liveObjectives: { LiveObjective },
 	objectiveIndex: number,
-	eliminateProgress: number,
 	objectiveToken: number,
+	npcProgress: number,
+	activeNPCs: { Model },
+	bag: { string },
+	lastMissionId: string?,
 }
 
 local MissionService = {}
 
 local Deps: any = nil
 
-local squads: { [number]: Squad } = {}
-local playerSquad: { [Player]: number } = {}
-local nextSquadId = 1
+local states: { [Player]: PlayerState } = {}
 
--- Every ZoneTag / PartTag referenced anywhere in MissionConfig, discovered once
--- at Init so we only ever set up listeners for tags the design actually uses.
-local zoneTagListeners: { [string]: boolean } = {}
-local partTagListeners: { [string]: boolean } = {}
-
-local function getSquad(player: Player): Squad?
-	local id = playerSquad[player]
-	return id and squads[id]
+local function shuffled(list: { string }): { string }
+	local copy = table.clone(list)
+	for i = #copy, 2, -1 do
+		local j = math.random(1, i)
+		copy[i], copy[j] = copy[j], copy[i]
+	end
+	return copy
 end
 
-local function currentObjective(squad: Squad): Objective?
-	if not squad.missionDef then
-		return nil
-	end
-	return squad.missionDef.Objectives[squad.objectiveIndex]
+--- How much harder/more rewarding a mission should be at the player's
+--- current level. Every DifficultyLevelStep levels adds DifficultyScalePerStep.
+local function difficultyScale(level: number): number
+	return 1 + math.floor((level - 1) / GameConfig.DifficultyLevelStep) * GameConfig.DifficultyScalePerStep
 end
 
-local function broadcastProgress(squad: Squad, complete: boolean)
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			Remotes.MissionProgress:FireClient(member, {
-				missionId = squad.missionDef and squad.missionDef.Id,
-				objectiveIndex = squad.objectiveIndex,
-				objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-				complete = complete,
-			})
-		end
+local function buildLiveObjectives(def: MissionDefinition, scale: number): { LiveObjective }
+	local live = {}
+	for _, objective in ipairs(def.Objectives) do
+		table.insert(live, {
+			Type = objective.Type,
+			ZoneTag = objective.ZoneTag,
+			PartTag = objective.PartTag,
+			Count = objective.BaseCount and math.max(1, math.ceil(objective.BaseCount * scale)),
+			DurationSeconds = objective.BaseDurationSeconds and math.ceil(objective.BaseDurationSeconds * scale),
+			Description = objective.Description,
+		})
 	end
+	return live
 end
 
-local function broadcastAssigned(squad: Squad)
-	local def = squad.missionDef
-	if not def then
-		return
-	end
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			Remotes.MissionAssigned:FireClient(member, {
-				missionId = def.Id,
-				displayName = def.DisplayName,
-				squadId = squad.id,
-				objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-				objectiveIndex = squad.objectiveIndex,
-				objectiveCount = #def.Objectives,
-			})
-		end
-	end
+local function currentObjective(state: PlayerState): LiveObjective?
+	return state.liveObjectives[state.objectiveIndex]
 end
 
-local advanceObjective: (squad: Squad) -> ()
-local assignMissionToSquad: (squad: Squad) -> ()
-local broadcastAssignedOne: (player: Player, squad: Squad) -> ()
-
---- SurviveTime objectives have no world trigger to complete them - they just
---- need "at least one squad member alive when the clock runs out". The token
---- check guards against a stale timer firing after the squad's mission (or
---- objective) has already moved on.
-local function scheduleSurviveTimeCheck(squad: Squad, durationSeconds: number)
-	local token = squad.objectiveToken
-	task.delay(durationSeconds, function()
-		if squads[squad.id] ~= squad or squad.objectiveToken ~= token then
-			return
+local function clearActiveNPCs(state: PlayerState)
+	for _, npc in ipairs(state.activeNPCs) do
+		if npc.Parent then
+			npc:Destroy()
 		end
-		for _, member in ipairs(squad.members) do
-			if Deps.ClassService.IsAlive(member) then
-				advanceObjective(squad)
-				return
-			end
-		end
-	end)
+	end
+	table.clear(state.activeNPCs)
 end
 
-local function completeMission(squad: Squad)
-	local def = squad.missionDef
-	if not def then
-		return
-	end
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			if Deps.DataService then
-				Deps.DataService.AddCredits(member, def.RewardCredits)
-				Deps.DataService.AddXP(member, def.RewardXP)
-				Deps.DataService.IncrementStat(member, "MissionsCompleted", 1)
-			end
-			Deps.NotifyService.Toast(member, `Mission complete: {def.DisplayName} (+{def.RewardCredits} credits)`, "success")
-		end
-	end
-	broadcastProgress(squad, true)
-
-	task.delay(4, function()
-		if squads[squad.id] == squad and Deps.RoundService.GetState() == "Active" then
-			assignMissionToSquad(squad)
-		end
-	end)
-end
-
-function advanceObjective(squad: Squad)
-	squad.objectiveIndex += 1
-	squad.eliminateProgress = 0
-	squad.objectiveToken += 1
-
-	if not squad.missionDef or squad.objectiveIndex > #squad.missionDef.Objectives then
-		completeMission(squad)
-		return
-	end
-
-	broadcastProgress(squad, false)
-
-	local objective = currentObjective(squad)
-	if objective and objective.Type == "SurviveTime" and objective.DurationSeconds then
-		scheduleSurviveTimeCheck(squad, objective.DurationSeconds)
-	end
-end
-
-function assignMissionToSquad(squad: Squad)
-	local fullPool = MissionConfig._PoolByFaction[squad.faction]
-	if not fullPool or #fullPool == 0 then
-		return
-	end
-
-	-- Missions like EliminateCount need actual hostile targets to exist, which
-	-- isn't plausible with a tiny server population - filter those out rather
-	-- than handing a squad an objective nobody can ever complete. Falls back
-	-- to the full pool if filtering would leave nothing assignable.
-	local totalPlayers = #Players:GetPlayers()
-	local eligiblePool = {}
-	for _, id in ipairs(fullPool) do
-		if totalPlayers >= (MissionConfig[id].MinPlayers or 1) then
-			table.insert(eligiblePool, id)
-		end
-	end
-	local pool = #eligiblePool > 0 and eligiblePool or fullPool
-
-	local missionId = pool[math.random(1, #pool)]
-	squad.missionDef = MissionConfig[missionId]
-	squad.objectiveIndex = 1
-	squad.eliminateProgress = 0
-	squad.objectiveToken += 1
-
-	broadcastAssigned(squad)
-
-	local objective = currentObjective(squad)
-	if objective and objective.Type == "SurviveTime" and objective.DurationSeconds then
-		scheduleSurviveTimeCheck(squad, objective.DurationSeconds)
-	end
-end
-
-local function createSquad(faction: string, members: { Player }): Squad
-	local squad: Squad = {
-		id = nextSquadId,
-		faction = faction,
-		members = members,
-		missionDef = nil,
-		objectiveIndex = 1,
-		eliminateProgress = 0,
-		objectiveToken = 0,
-	}
-	nextSquadId += 1
-	squads[squad.id] = squad
-	for _, member in ipairs(members) do
-		playerSquad[member] = squad.id
-	end
-	return squad
-end
-
---- Forms squads for any of `players` not already in one, and tops up
---- under-strength existing squads for `faction` before creating new ones.
---- Safe to call repeatedly (e.g. every time a reinforcement wave spawns).
-function MissionService.FormSquadsForFaction(faction: string, players: { Player })
-	local unassigned = {}
-	for _, player in ipairs(players) do
-		if not playerSquad[player] and player.Parent then
-			table.insert(unassigned, player)
-		end
-	end
-	if #unassigned == 0 then
-		return
-	end
-
-	for _, squad in pairs(squads) do
-		if squad.faction == faction then
-			while #squad.members < GameConfig.SquadSize and #unassigned > 0 do
-				local player = table.remove(unassigned) :: Player
-				table.insert(squad.members, player)
-				playerSquad[player] = squad.id
-				broadcastAssignedOne(player, squad)
-			end
-		end
-	end
-
-	while #unassigned > 0 do
-		local members = {}
-		for _ = 1, math.min(GameConfig.SquadSize, #unassigned) do
-			table.insert(members, table.remove(unassigned))
-		end
-		local squad = createSquad(faction, members)
-		assignMissionToSquad(squad)
-	end
-end
-
-function broadcastAssignedOne(player, squad)
-	local def = squad.missionDef
+local function broadcastAssigned(player: Player, state: PlayerState)
+	local def = state.missionDef
 	if not def or not player.Parent then
 		return
 	end
+	local objective = currentObjective(state)
 	Remotes.MissionAssigned:FireClient(player, {
 		missionId = def.Id,
 		displayName = def.DisplayName,
-		squadId = squad.id,
-		objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-		objectiveIndex = squad.objectiveIndex,
-		objectiveCount = #def.Objectives,
+		objectiveText = objective and objective.Description,
+		objectiveIndex = state.objectiveIndex,
+		objectiveCount = #state.liveObjectives,
 	})
 end
 
---- Called by ClassService whenever a hostile kill lands, to progress any
---- EliminateCount objective the killer's squad might currently have.
-function MissionService.NotifyKill(killer: Player, victim: Player)
-	local squad = getSquad(killer)
-	if not squad then
+local function broadcastProgress(player: Player, state: PlayerState, complete: boolean, extra: string?)
+	if not player.Parent then
 		return
 	end
-	local objective = currentObjective(squad)
-	if not objective or objective.Type ~= "EliminateCount" then
+	local objective = currentObjective(state)
+	Remotes.MissionProgress:FireClient(player, {
+		missionId = state.missionDef and state.missionDef.Id,
+		objectiveIndex = state.objectiveIndex,
+		objectiveText = extra or (objective and objective.Description),
+		complete = complete,
+	})
+end
+
+local advanceObjective: (player: Player, state: PlayerState) -> ()
+local assignNextMission: (player: Player) -> ()
+local beginCurrentObjective: (player: Player, state: PlayerState) -> ()
+
+local function completeMission(player: Player, state: PlayerState)
+	local def = state.missionDef
+	if not def then
 		return
 	end
-	local victimFaction = Deps.ClassService.GetPlayerFaction(victim)
-	if victimFaction ~= objective.TargetFaction then
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	local scale = difficultyScale(level)
+	local credits = math.ceil(def.BaseRewardCredits * scale)
+	local xp = math.ceil(def.BaseRewardXP * scale)
+
+	if Deps.DataService then
+		Deps.DataService.AddCredits(player, credits)
+		Deps.DataService.AddXP(player, xp)
+		Deps.DataService.IncrementStat(player, "MissionsCompleted", 1)
+	end
+	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{credits} credits, +{xp} XP)`, "success")
+	broadcastProgress(player, state, true)
+
+	state.lastMissionId = def.Id
+	task.delay(3, function()
+		if states[player] == state and player.Parent then
+			assignNextMission(player)
+		end
+	end)
+end
+
+function advanceObjective(player, state)
+	clearActiveNPCs(state)
+	state.objectiveIndex += 1
+	state.npcProgress = 0
+	state.objectiveToken += 1
+
+	if state.objectiveIndex > #state.liveObjectives then
+		completeMission(player, state)
 		return
 	end
-	squad.eliminateProgress += 1
-	broadcastProgress(squad, false)
-	if squad.eliminateProgress >= (objective.Count or 1) then
-		advanceObjective(squad)
+
+	broadcastProgress(player, state, false)
+	beginCurrentObjective(player, state)
+end
+
+function beginCurrentObjective(player, state)
+	local objective = currentObjective(state)
+	if not objective then
+		return
+	end
+
+	if objective.Type == "SurviveTime" and objective.DurationSeconds then
+		local token = state.objectiveToken
+		task.delay(objective.DurationSeconds, function()
+			if states[player] == state and state.objectiveToken == token and player.Parent then
+				advanceObjective(player, state)
+			end
+		end)
+	elseif objective.Type == "EliminateNPCCount" and objective.Count then
+		local character = player.Character
+		local origin = character and character:FindFirstChild("HumanoidRootPart")
+		local center = (origin :: BasePart?) and (origin :: BasePart).Position or Vector3.new(0, 5, 0)
+		local token = state.objectiveToken
+
+		local npcConfig = {
+			Health = GameConfig.NPCBaseHealth * difficultyScale((Deps.DataService.GetProfile(player) or { Level = 1 }).Level),
+			Damage = GameConfig.NPCBaseDamage,
+			WalkSpeed = GameConfig.NPCBaseWalkSpeed,
+			AttackRange = 5,
+			AttackCooldown = 1.2,
+		}
+
+		for _ = 1, objective.Count do
+			local offset = Vector3.new(math.random(-20, 20), 0, math.random(-20, 20))
+			local spawnPos = center + offset + Vector3.new(0, 3, 0)
+			local npc = Deps.NPCService.SpawnHostile(spawnPos, player, npcConfig, function(_killer: Player?)
+				if states[player] ~= state or state.objectiveToken ~= token then
+					return
+				end
+				state.npcProgress += 1
+				broadcastProgress(player, state, false, `{objective.Description} ({state.npcProgress}/{objective.Count})`)
+				if state.npcProgress >= (objective.Count :: number) then
+					advanceObjective(player, state)
+				end
+			end)
+			table.insert(state.activeNPCs, npc)
+		end
 	end
 end
 
-local function handleZoneReached(player: Player, zoneTag: string)
-	local squad = getSquad(player)
-	if not squad then
+function assignNextMission(player)
+	local state = states[player]
+	if not state then
 		return
 	end
-	local objective = currentObjective(squad)
+	clearActiveNPCs(state)
+
+	local pool = MissionConfig._PoolByClass[state.classId]
+	if not pool or #pool == 0 then
+		state.missionDef = nil
+		return
+	end
+
+	if #state.bag == 0 then
+		local bag = shuffled(pool)
+		if state.lastMissionId and bag[1] == state.lastMissionId and #bag > 1 then
+			local swapIndex = math.random(2, #bag)
+			bag[1], bag[swapIndex] = bag[swapIndex], bag[1]
+		end
+		state.bag = bag
+	end
+
+	local missionId = table.remove(state.bag, 1) :: string
+	local def = MissionConfig[missionId]
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	local scale = difficultyScale(level)
+
+	state.missionDef = def
+	state.liveObjectives = buildLiveObjectives(def, scale)
+	state.objectiveIndex = 1
+	state.npcProgress = 0
+	state.objectiveToken += 1
+
+	broadcastAssigned(player, state)
+	beginCurrentObjective(player, state)
+end
+
+local function handleZoneReached(player: Player, zoneTag: string)
+	local state = states[player]
+	if not state then
+		return
+	end
+	local objective = currentObjective(state)
 	if not objective or objective.Type ~= "ReachZone" or objective.ZoneTag ~= zoneTag then
 		return
 	end
@@ -2782,15 +2707,15 @@ local function handleZoneReached(player: Player, zoneTag: string)
 		Deps.DataService.IncrementStat(player, "Escapes", 1)
 	end
 
-	advanceObjective(squad)
+	advanceObjective(player, state)
 end
 
 local function handleTerminalUsed(player: Player, partTag: string)
-	local squad = getSquad(player)
-	if not squad then
+	local state = states[player]
+	if not state then
 		return
 	end
-	local objective = currentObjective(squad)
+	local objective = currentObjective(state)
 	if not objective or objective.Type ~= "InteractPart" or objective.PartTag ~= partTag then
 		return
 	end
@@ -2799,8 +2724,11 @@ local function handleTerminalUsed(player: Player, partTag: string)
 		Deps.DoorService.UnlockGroup("CellDoor")
 	end
 
-	advanceObjective(squad)
+	advanceObjective(player, state)
 end
+
+local zoneTagListeners: { [string]: boolean } = {}
+local partTagListeners: { [string]: boolean } = {}
 
 local function registerZoneTag(zoneTag: string)
 	if zoneTagListeners[zoneTag] then
@@ -2871,14 +2799,27 @@ local function discoverTags()
 	end
 end
 
-function MissionService.GetSquadId(player: Player): number?
-	return playerSquad[player]
+--- Called by ClassService right after a player's first spawn.
+function MissionService.StartForPlayer(player: Player, classId: string)
+	states[player] = {
+		classId = classId,
+		missionDef = nil,
+		liveObjectives = {},
+		objectiveIndex = 1,
+		objectiveToken = 0,
+		npcProgress = 0,
+		activeNPCs = {},
+		bag = {},
+		lastMissionId = nil,
+	}
+	assignNextMission(player)
 end
 
-function MissionService.ResetForNewRound()
-	table.clear(squads)
-	table.clear(playerSquad)
-	nextSquadId = 1
+--- Called by ClassService.RequestClassChange: your old class's mission and
+--- any NPCs it spawned don't carry over, but your bag-based no-repeat
+--- history does reset per class (each class has its own small pool anyway).
+function MissionService.OnClassChanged(player: Player, classId: string)
+	MissionService.StartForPlayer(player, classId)
 end
 
 function MissionService.Init(deps: any)
@@ -2886,18 +2827,145 @@ function MissionService.Init(deps: any)
 	discoverTags()
 
 	Players.PlayerRemoving:Connect(function(player)
-		local squad = getSquad(player)
-		if squad then
-			local idx = table.find(squad.members, player)
-			if idx then
-				table.remove(squad.members, idx)
-			end
+		local state = states[player]
+		if state then
+			clearActiveNPCs(state)
 		end
-		playerSquad[player] = nil
+		states[player] = nil
 	end)
 end
 
 return MissionService
+]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBX000034"><Properties>
+<string name="Name">NPCService</string>
+<ProtectedString name="Source"><![CDATA[--!strict
+-- Spawns simple hostile NPC "dummies" for EliminateNPCCount mission
+-- objectives. Deliberately minimal rigs (a torso-sized HumanoidRootPart plus
+-- a Head, welded together) rather than full character models - this is a
+-- solo game, the point is a believable target to shoot/melee, not a
+-- cosmetic showcase. Swap in real rigs later by editing buildRig below;
+-- every caller only ever sees a Model + Humanoid so nothing else changes.
+
+local CollectionService = game:GetService("CollectionService")
+local Workspace = game:GetService("Workspace")
+
+local NPCService = {}
+
+local Deps: any = nil
+
+local npcFolder = Instance.new("Folder")
+npcFolder.Name = "HostileNPCs"
+npcFolder.Parent = Workspace
+
+export type NPCCombatConfig = {
+	Health: number,
+	Damage: number,
+	WalkSpeed: number,
+	AttackRange: number,
+	AttackCooldown: number,
+}
+
+local function buildRig(position: Vector3): (Model, Humanoid, BasePart)
+	local model = Instance.new("Model")
+	model.Name = "Hostile"
+
+	local root = Instance.new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Size = Vector3.new(2, 2, 1)
+	root.CFrame = CFrame.new(position)
+	root.Color = Color3.fromRGB(150, 30, 30)
+	root.Material = Enum.Material.SmoothPlastic
+	root.Parent = model
+
+	local head = Instance.new("Part")
+	head.Name = "Head"
+	head.Shape = Enum.PartType.Ball
+	head.Size = Vector3.new(1.2, 1.2, 1.2)
+	head.CFrame = CFrame.new(position + Vector3.new(0, 1.6, 0))
+	head.Color = Color3.fromRGB(180, 60, 60)
+	head.Material = Enum.Material.SmoothPlastic
+	head.Parent = model
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = root
+	weld.Part1 = head
+	weld.Parent = root
+
+	local humanoid = Instance.new("Humanoid")
+	humanoid.Parent = model
+
+	model.PrimaryPart = root
+	return model, humanoid, root
+end
+
+local function runChaseAI(model: Model, humanoid: Humanoid, root: BasePart, target: Player, cfg: NPCCombatConfig)
+	local lastAttack = 0
+	while model.Parent and humanoid.Health > 0 do
+		local character = target.Character
+		local targetRoot = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local targetHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+		if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+			local distance = (targetRoot.Position - root.Position).Magnitude
+			humanoid:MoveTo(targetRoot.Position)
+
+			if distance <= cfg.AttackRange then
+				local now = os.clock()
+				if now - lastAttack >= cfg.AttackCooldown then
+					lastAttack = now
+					Deps.CombatService.ApplyDamage(nil, targetHumanoid, cfg.Damage)
+				end
+			end
+		end
+
+		task.wait(0.3)
+	end
+end
+
+--- Spawns one hostile NPC near `position` that chases and melees `target`.
+--- Calls onDied(killer) exactly once, when the NPC's Humanoid dies, with
+--- whoever CombatService last attributed damage to (nil if it just expired).
+function NPCService.SpawnHostile(position: Vector3, target: Player, cfg: NPCCombatConfig, onDied: (Player?) -> ()): Model
+	local model, humanoid, root = buildRig(position)
+	humanoid.MaxHealth = cfg.Health
+	humanoid.Health = cfg.Health
+	humanoid.WalkSpeed = cfg.WalkSpeed
+
+	CollectionService:AddTag(model, "HostileNPC")
+	model.Parent = npcFolder
+
+	local diedConn: RBXScriptConnection
+	diedConn = humanoid.Died:Connect(function()
+		diedConn:Disconnect()
+		local killer = Deps.CombatService.GetLastAttacker(humanoid)
+		Deps.CombatService.ClearAttribution(humanoid)
+
+		task.delay(6, function()
+			if model.Parent then
+				model:Destroy()
+			end
+		end)
+
+		onDied(killer)
+	end)
+
+	task.spawn(runChaseAI, model, humanoid, root, target, cfg)
+
+	return model
+end
+
+function NPCService.DespawnAll()
+	npcFolder:ClearAllChildren()
+end
+
+function NPCService.Init(deps: any)
+	Deps = deps
+end
+
+return NPCService
 ]]></ProtectedString>
 </Properties>
 </Item>
@@ -2937,373 +3005,29 @@ return NotifyService
 </Properties>
 </Item>
 <Item class="ModuleScript" referent="RBX000036"><Properties>
-<string name="Name">RoundService</string>
-<ProtectedString name="Source"><![CDATA[--!strict
--- The conductor. Owns the Lobby -> Intermission -> Active -> Ending state
--- machine, builds the roster at round start, runs the win-condition poll,
--- spawns reinforcement waves (MTF/Chaos), and drives the warhead subsystem.
--- Nothing about this requires an admin: PlayerAdded/Removing plus a handful
--- of timers are the only inputs, matching the "fully automated" brief.
-
-local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local ClassConfig = require(ReplicatedStorage.Shared.Config.ClassConfig)
-local Enums = require(ReplicatedStorage.Shared.Modules.Enums)
-local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
-
-local RoundService = {}
-
-local Deps: any = nil
-
-local state: string = Enums.RoundState.Lobby
-local roundToken = 0
-local roundStartClock = 0
-local warheadArmed = false
-local warheadPanelsWired = false
-
--- Forward declarations: several functions below call each other out of the
--- order they're defined in (e.g. checkWinConditions calls endRound, which is
--- defined near the bottom). Lua scoping is lexical, so these locals must
--- exist before anything that closes over them - including the public
--- RoundService.ForceStart*/GetState functions right below.
-local startIntermission: () -> ()
-local startActiveRound: () -> ()
-local endRound: (reason: string) -> ()
-
-function RoundService.GetState(): string
-	return state
-end
-
---- Admin-only escape hatches (see Admin/AdminCommands.lua). Bypasses the
---- normal population/timer gates for testing and moderator overrides.
-function RoundService.ForceStartIntermission()
-	if state == Enums.RoundState.Lobby then
-		startIntermission()
-	end
-end
-
-function RoundService.ForceEndRound(reason: string)
-	if state == Enums.RoundState.Active then
-		endRound(reason)
-	end
-end
-
-local function broadcast(payload: { [string]: any })
-	payload.state = state
-	Remotes.RoundStateChanged:FireAllClients(payload)
-end
-
--- ============================== Lobby / Intermission =========================
-
-local function maybeStartFromLobby()
-	if state ~= Enums.RoundState.Lobby then
-		return
-	end
-	if #Players:GetPlayers() >= GameConfig.MinPlayersToStart then
-		startIntermission()
-	end
-end
-
-function startIntermission()
-	state = Enums.RoundState.Intermission
-	local myToken = roundToken
-	local timeLeft = GameConfig.IntermissionSeconds
-
-	task.spawn(function()
-		while timeLeft > 0 do
-			if roundToken ~= myToken or state ~= Enums.RoundState.Intermission then
-				return
-			end
-			if #Players:GetPlayers() < GameConfig.MinPlayersToStart then
-				state = Enums.RoundState.Lobby
-				broadcast({ reason = Enums.RoundEndReason.NotEnoughPlayers })
-				return
-			end
-			broadcast({ timeLeft = timeLeft })
-			task.wait(1)
-			timeLeft -= 1
-		end
-		if roundToken == myToken and state == Enums.RoundState.Intermission then
-			startActiveRound()
-		end
-	end)
-end
-
--- ================================== Active ====================================
-
-local function spawnRosterWave(classId: string, faction: string, players: { Player })
-	if #players == 0 then
-		return
-	end
-	for _, player in ipairs(players) do
-		Deps.ClassService.SpawnCharacterForClass(player, classId)
-	end
-	Deps.MissionService.FormSquadsForFaction(faction, players)
-end
-
-local function runReinforcementLoop(myToken: number)
-	while roundToken == myToken and state == Enums.RoundState.Active do
-		task.wait(GameConfig.ReinforcementWaveIntervalSeconds)
-		if roundToken ~= myToken or state ~= Enums.RoundState.Active then
-			return
-		end
-
-		local elapsed = os.clock() - roundStartClock
-		local queue = Deps.ClassService.GetSpectatorQueue()
-		if #queue == 0 then
-			continue
-		end
-
-		local foundationAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.Foundation)
-		local chaosAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.ChaosInsurgency)
-		local scpAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.SCP)
-
-		local mtfEligible = elapsed >= GameConfig.MTFReinforceDelaySeconds and foundationAlive < 12
-		local chaosEligible = elapsed >= GameConfig.ChaosSpawnDelaySeconds and chaosAlive < 8
-
-		if mtfEligible and foundationAlive <= (scpAlive + chaosAlive) then
-			local group = Deps.ClassService.PopFromSpectatorQueue(GameConfig.SquadSize)
-			spawnRosterWave("MTF", Enums.Faction.Foundation, group)
-			Deps.NotifyService.ToastAll("MTF Nu-7 reinforcements have arrived.", "info")
-		elseif chaosEligible then
-			local group = Deps.ClassService.PopFromSpectatorQueue(GameConfig.SquadSize)
-			spawnRosterWave("Chaos", Enums.Faction.ChaosInsurgency, group)
-			Deps.NotifyService.ToastAll("Chaos Insurgency operatives have infiltrated the facility.", "warning")
-		end
-	end
-end
-
-local function checkWinConditions()
-	if state ~= Enums.RoundState.Active then
-		return
-	end
-	local elapsed = os.clock() - roundStartClock
-	local chaosInPlay = elapsed >= GameConfig.ChaosSpawnDelaySeconds
-
-	local scpAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.SCP)
-	local foundationAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.Foundation)
-	local chaosAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.ChaosInsurgency)
-	local dclassAlive = Deps.ClassService.GetAliveCountByFaction(Enums.Faction.DClass)
-
-	if scpAlive == 0 then
-		endRound(Enums.RoundEndReason.FoundationVictory)
-		return
-	end
-
-	if foundationAlive + chaosAlive + dclassAlive == 0 then
-		endRound(Enums.RoundEndReason.SCPVictory)
-		return
-	end
-
-	if chaosInPlay and foundationAlive == 0 and chaosAlive > 0 then
-		endRound(Enums.RoundEndReason.ChaosVictory)
-		return
-	end
-end
-
-function RoundService.NotifyPlayerDied(_player: Player)
-	task.defer(checkWinConditions)
-end
-
-local function detonateWarhead(myToken: number)
-	if roundToken ~= myToken or state ~= Enums.RoundState.Active or not warheadArmed then
-		return
-	end
-	Deps.NotifyService.ToastAll("The facility has been destroyed by the warhead.", "danger")
-	Remotes.WarheadUpdate:FireAllClients({ active = false, detonated = true })
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		if Deps.ClassService.IsAlive(player) then
-			local character = player.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if humanoid and humanoid.Health > 0 then
-				Deps.CombatService.ApplyDamage(nil, humanoid, math.huge)
-			end
-		end
-	end
-
-	endRound(Enums.RoundEndReason.Warhead)
-end
-
-local function refreshWarheadPromptText(prompt: ProximityPrompt)
-	prompt.ActionText = warheadArmed and "Disarm Warhead" or "Arm Warhead"
-	prompt.ObjectText = "Alpha Warhead Control"
-end
-
-local function wireWarheadPanel(instance: Instance)
-	if not instance:IsA("BasePart") then
-		return
-	end
-	local prompt = instance:FindFirstChildOfClass("ProximityPrompt")
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.HoldDuration = 2
-		prompt.MaxActivationDistance = 8
-		prompt.Parent = instance
-	end
-	refreshWarheadPromptText(prompt)
-
-	prompt.Triggered:Connect(function(player: Player)
-		if state ~= Enums.RoundState.Active then
-			return
-		end
-		if not Deps.KeycardService.HasAccess(player, 4) then
-			Deps.NotifyService.Toast(player, "Insufficient clearance for warhead control.", "warning")
-			return
-		end
-
-		if warheadArmed then
-			warheadArmed = false
-			Deps.NotifyService.ToastAll("Warhead disarmed.", "info")
-			Remotes.WarheadUpdate:FireAllClients({ active = false })
-		else
-			warheadArmed = true
-			local myToken = roundToken
-			Deps.NotifyService.ToastAll(
-				`WARHEAD ARMED by {player.Name}. Detonation in {GameConfig.WarheadFuseSeconds} seconds.`,
-				"danger"
-			)
-			Remotes.WarheadUpdate:FireAllClients({ active = true, duration = GameConfig.WarheadFuseSeconds })
-			task.delay(GameConfig.WarheadFuseSeconds, function()
-				detonateWarhead(myToken)
-			end)
-		end
-		refreshWarheadPromptText(prompt)
-	end)
-end
-
-local function setupWarheadPanels()
-	if warheadPanelsWired then
-		return
-	end
-	warheadPanelsWired = true
-	for _, instance in ipairs(CollectionService:GetTagged("WarheadPanel")) do
-		wireWarheadPanel(instance)
-	end
-	CollectionService:GetInstanceAddedSignal("WarheadPanel"):Connect(wireWarheadPanel)
-end
-
-function startActiveRound()
-	state = Enums.RoundState.Active
-	roundToken += 1
-	local myToken = roundToken
-	roundStartClock = os.clock()
-	warheadArmed = false
-
-	Deps.ClassService.ResetForNewRound()
-	Deps.MissionService.ResetForNewRound()
-	Deps.DoorService.ResetAllDoors()
-
-	local players = Players:GetPlayers()
-	local roster = Deps.ClassService.BuildInitialRoster(players)
-
-	local byFaction: { [string]: { Player } } = {}
-	for player, classId in pairs(roster) do
-		Deps.ClassService.SpawnCharacterForClass(player, classId)
-		local faction = ClassConfig[classId].Faction
-		byFaction[faction] = byFaction[faction] or {}
-		table.insert(byFaction[faction], player)
-	end
-
-	for _, faction in ipairs({ Enums.Faction.Foundation, Enums.Faction.DClass }) do
-		if byFaction[faction] then
-			Deps.MissionService.FormSquadsForFaction(faction, byFaction[faction])
-		end
-	end
-
-	broadcast({ timeLeft = GameConfig.RoundLengthSeconds })
-
-	task.spawn(runReinforcementLoop, myToken)
-
-	task.spawn(function()
-		local remaining = GameConfig.RoundLengthSeconds
-		while remaining > 0 do
-			if roundToken ~= myToken or state ~= Enums.RoundState.Active then
-				return
-			end
-			task.wait(3)
-			remaining -= 3
-			checkWinConditions()
-		end
-		if roundToken == myToken and state == Enums.RoundState.Active then
-			endRound(Enums.RoundEndReason.TimeLimit)
-		end
-	end)
-end
-
-function endRound(reason: string)
-	if state ~= Enums.RoundState.Active then
-		return
-	end
-	state = Enums.RoundState.Ending
-	roundToken += 1
-	broadcast({ reason = reason })
-	Deps.NotifyService.ToastAll(`Round over: {reason}`, "info")
-
-	task.delay(GameConfig.RoundEndDisplaySeconds, function()
-		state = Enums.RoundState.Lobby
-		maybeStartFromLobby()
-	end)
-end
-
-function RoundService.Init(deps: any)
-	Deps = deps
-
-	Remotes.GetInitialState.OnServerInvoke = function(player: Player)
-		return {
-			state = state,
-			classId = Deps.ClassService.GetPlayerClass(player),
-		}
-	end
-
-	Players.PlayerAdded:Connect(function(player)
-		if state == Enums.RoundState.Active then
-			Deps.ClassService.EnterSpectator(player)
-		end
-		maybeStartFromLobby()
-	end)
-
-	Players.PlayerRemoving:Connect(function()
-		-- Falling below MinPlayersToStart mid-intermission is handled by the
-		-- intermission loop's own check each second; only Active needs a nudge
-		-- here since a departing player might complete a win condition.
-		if state == Enums.RoundState.Active then
-			task.defer(checkWinConditions)
-		end
-	end)
-
-	setupWarheadPanels()
-	maybeStartFromLobby()
-end
-
-return RoundService
-]]></ProtectedString>
-</Properties>
-</Item>
-<Item class="ModuleScript" referent="RBX000037"><Properties>
 <string name="Name">SCPAbilityService</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Server-authoritative behaviour for every SCP class. Two kinds of logic live
--- here:
---   1. Passive, continuous checks run on a throttled Heartbeat loop (SCP-173's
---      observer freeze/lunge, SCP-096's view-detection/enrage, SCP-106's touch
---      corrode) - these never trust the client at all.
---   2. Active abilities requested via the SCPAbility RemoteEvent (SCP-049's
---      Touch of Death / Reanimate, SCP-106's Phase / Pocket Dimension) - the
---      client only asks; this service validates class, range and cooldown
---      before anything happens.
+-- Server-authoritative behaviour for the two prestige SCP classes. In a solo
+-- game there's no second player to be observed by or to hunt, so both
+-- abilities target hostile NPCs (the same "HostileNPC"-tagged dummies
+-- NPCService spawns for mission objectives) instead of other players:
+--   - SCP-049: "E" Touch of Death (instant kill in melee range), "R"
+--     Reanimate (raises a nearby corpse into a hostile zombie with its own
+--     chase AI - works on old player-death corpses too, not just NPCs).
+--   - SCP-106: "E" Phase (noclip through walls for a few seconds), "R"
+--     Pocket Dimension (banishes a target to an isolated room and damages
+--     it over time); passive corrode-on-touch runs on a heartbeat loop.
+--
+-- Every kill still routes through CombatService.ApplyDamage, so NPCService's
+-- own death/attribution handling (and therefore mission progress) works
+-- identically whether an NPC died to a gun or to an SCP ability.
 
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local SCPConfig = require(ReplicatedStorage.Shared.Config.SCPConfig)
-local Enums = require(ReplicatedStorage.Shared.Modules.Enums)
 local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
 
 local SCPAbilityService = {}
@@ -3314,29 +3038,21 @@ local HEARTBEAT_INTERVAL = 0.15
 
 type SCPState = {
 	classId: string,
-	-- SCP-096
-	viewedSince: number?,
-	enraged: boolean,
-	enrageEndsAt: number,
-	cryUntil: number,
 	-- SCP-106
 	phasing: boolean,
 	phaseCooldownUntil: number,
 	lastCorrodeTick: number,
-	-- SCP-049 / SCP-173 shared
+	-- shared cooldown bookkeeping
 	lastAbilityUse: { [string]: number },
 }
 
 local registry: { [Player]: SCPState } = {}
 local pocketDimensionRoom: BasePart? = nil
-local pocketVictims: { [Player]: { returnCFrame: CFrame, expiresAt: number } } = {}
+local pocketVictims: { [Model]: { returnCFrame: CFrame, expiresAt: number } } = {}
 
 local function newState(classId: string): SCPState
 	return {
 		classId = classId,
-		enraged = false,
-		enrageEndsAt = 0,
-		cryUntil = 0,
 		phasing = false,
 		phaseCooldownUntil = 0,
 		lastCorrodeTick = 0,
@@ -3350,37 +3066,24 @@ end
 
 function SCPAbilityService.DeregisterSCP(player: Player)
 	registry[player] = nil
-	pocketVictims[player] = nil
-end
-
-function SCPAbilityService.ResetForNewRound()
-	table.clear(registry)
-	table.clear(pocketVictims)
 end
 
 -- ============================== shared helpers ==============================
 
-local function getAliveHostiles(): { Player }
+type HostileHandle = { model: Model, root: BasePart, humanoid: Humanoid }
+
+local function getNearbyHostileNPCs(): { HostileHandle }
 	local list = {}
-	for _, player in ipairs(Players:GetPlayers()) do
-		if Deps.ClassService.IsAlive(player) and Deps.ClassService.GetPlayerFaction(player) ~= Enums.Faction.SCP then
-			table.insert(list, player)
+	for _, model in ipairs(CollectionService:GetTagged("HostileNPC")) do
+		if model:IsA("Model") then
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if humanoid and root and humanoid.Health > 0 then
+				table.insert(list, { model = model, root = root, humanoid = humanoid })
+			end
 		end
 	end
 	return list
-end
-
-local function hasLineOfSight(fromPos: Vector3, toPos: Vector3, ignore: { Instance }): boolean
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
-	local result = Workspace:Raycast(fromPos, toPos - fromPos, params)
-	if not result then
-		return true
-	end
-	-- Something solid is between the two points if the hit is meaningfully
-	-- short of the target distance.
-	return (result.Position - toPos).Magnitude < 1.5
 end
 
 local function setCooldown(player: Player, ability: string, seconds: number)
@@ -3401,60 +3104,6 @@ local function isOnCooldown(player: Player, ability: string): boolean
 	return until_ ~= nil and os.clock() < until_
 end
 
--- ================================ SCP-173 ===================================
-
-local function updateSCP173(player: Player, state: SCPState)
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not character or not humanoid or not root or humanoid.Health <= 0 then
-		return
-	end
-
-	local cfg = SCPConfig.SCP173
-	local hostiles = getAliveHostiles()
-	local observed = false
-
-	for _, hostile in ipairs(hostiles) do
-		local hostileChar = hostile.Character
-		local hostileHead = hostileChar and hostileChar:FindFirstChild("Head") :: BasePart?
-		if hostileHead then
-			local toSCP = root.Position - hostileHead.Position
-			local distance = toSCP.Magnitude
-			if distance <= cfg.ObserverMaxDistance then
-				local lookVector = hostileHead.CFrame.LookVector
-				local angle = math.deg(math.acos(math.clamp(lookVector.Unit:Dot(toSCP.Unit), -1, 1)))
-				if angle <= cfg.ObserverConeDegrees / 2 and hasLineOfSight(hostileHead.Position, root.Position, { character, hostileChar :: Instance }) then
-					observed = true
-					break
-				end
-			end
-		end
-	end
-
-	humanoid.WalkSpeed = observed and 0 or cfg.MoveSpeedWhenUnobserved
-
-	if not observed then
-		local now = os.clock()
-		local lastLunge = state.lastAbilityUse["Lunge"] or 0
-		if now - lastLunge >= cfg.NeckSnapCooldown then
-			for _, hostile in ipairs(hostiles) do
-				local hostileChar = hostile.Character
-				local hostileRoot = hostileChar and hostileChar:FindFirstChild("HumanoidRootPart") :: BasePart?
-				local hostileHumanoid = hostileChar and hostileChar:FindFirstChildOfClass("Humanoid")
-				if hostileRoot and hostileHumanoid and hostileHumanoid.Health > 0 then
-					if (hostileRoot.Position - root.Position).Magnitude <= cfg.LungeRange then
-						Deps.CombatService.ApplyDamage(player, hostileHumanoid, cfg.LungeDamage)
-						Deps.NotifyService.Toast(hostile, "Your neck snaps before you even hear it move.", "danger")
-						state.lastAbilityUse["Lunge"] = now
-						break
-					end
-				end
-			end
-		end
-	end
-end
-
 -- ================================ SCP-049 ===================================
 
 local ZOMBIE_TAG = "SCP049Zombie"
@@ -3468,30 +3117,23 @@ local function runZombieAI(zombie: Model, cfg: SCPConfig.SCP049Config)
 
 	local lastBite = 0
 	while zombie.Parent and humanoid.Health > 0 do
-		local nearest: Player? = nil
+		local nearest: HostileHandle? = nil
 		local nearestDist = math.huge
-		for _, hostile in ipairs(getAliveHostiles()) do
-			local hostileRoot = hostile.Character and hostile.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if hostileRoot then
-				local dist = (hostileRoot.Position - root.Position).Magnitude
-				if dist < nearestDist then
-					nearestDist = dist
-					nearest = hostile
-				end
+		for _, hostile in ipairs(getNearbyHostileNPCs()) do
+			local dist = (hostile.root.Position - root.Position).Magnitude
+			if dist < nearestDist then
+				nearestDist = dist
+				nearest = hostile
 			end
 		end
 
 		if nearest then
-			local hostileRoot = nearest.Character:FindFirstChild("HumanoidRootPart") :: BasePart
-			humanoid:MoveTo(hostileRoot.Position)
+			humanoid:MoveTo(nearest.root.Position)
 			if nearestDist <= 5 then
 				local now = os.clock()
 				if now - lastBite >= cfg.ZombieBiteCooldown then
 					lastBite = now
-					local hostileHumanoid = nearest.Character:FindFirstChildOfClass("Humanoid")
-					if hostileHumanoid then
-						Deps.CombatService.ApplyDamage(nil, hostileHumanoid, cfg.ZombieBiteDamage)
-					end
+					Deps.CombatService.ApplyDamage(nil, nearest.humanoid, cfg.ZombieBiteDamage)
 				end
 			end
 		end
@@ -3526,7 +3168,7 @@ local function reanimateCorpse(corpse: Model, cfg: SCPConfig.SCP049Config)
 	task.spawn(runZombieAI, corpse, cfg)
 end
 
-local function tryTouchOfDeath(player: Player, state: SCPState)
+local function tryTouchOfDeath(player: Player)
 	if isOnCooldown(player, "TouchOfDeath") then
 		return
 	end
@@ -3537,31 +3179,24 @@ local function tryTouchOfDeath(player: Player, state: SCPState)
 		return
 	end
 
-	local best: Player? = nil
+	local best: HostileHandle? = nil
 	local bestDist = cfg.TouchOfDeathRange
-	for _, hostile in ipairs(getAliveHostiles()) do
-		local hostileRoot = hostile.Character and hostile.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if hostileRoot then
-			local dist = (hostileRoot.Position - root.Position).Magnitude
-			if dist <= bestDist then
-				bestDist = dist
-				best = hostile
-			end
+	for _, hostile in ipairs(getNearbyHostileNPCs()) do
+		local dist = (hostile.root.Position - root.Position).Magnitude
+		if dist <= bestDist then
+			bestDist = dist
+			best = hostile
 		end
 	end
 
 	setCooldown(player, "TouchOfDeath", cfg.TouchOfDeathCooldown)
 
 	if best then
-		local hostileHumanoid = best.Character:FindFirstChildOfClass("Humanoid")
-		if hostileHumanoid then
-			Deps.CombatService.ApplyDamage(player, hostileHumanoid, cfg.TouchOfDeathDamage)
-			Deps.NotifyService.Toast(best, "The Plague Doctor's cure finds you.", "danger")
-		end
+		Deps.CombatService.ApplyDamage(player, best.humanoid, cfg.TouchOfDeathDamage)
 	end
 end
 
-local function tryReanimate(player: Player, state: SCPState)
+local function tryReanimate(player: Player)
 	if isOnCooldown(player, "Reanimate") then
 		return
 	end
@@ -3596,96 +3231,6 @@ local function tryReanimate(player: Player, state: SCPState)
 		Deps.NotifyService.Toast(player, "The corpse rises to serve you.", "success")
 	else
 		Deps.NotifyService.Toast(player, "No reanimatable corpse nearby.", "warning")
-	end
-end
-
--- ================================ SCP-096 ===================================
-
-local function updateSCP096(player: Player, state: SCPState)
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not character or not humanoid or not root or humanoid.Health <= 0 then
-		return
-	end
-
-	local cfg = SCPConfig.SCP096
-	local now = os.clock()
-
-	if state.enraged then
-		if now >= state.enrageEndsAt then
-			state.enraged = false
-			state.cryUntil = now + cfg.PostEnrageCryDurationSeconds
-			humanoid.WalkSpeed = 8
-			return
-		end
-
-		local nearest: Player? = nil
-		local nearestDist = math.huge
-		for _, hostile in ipairs(getAliveHostiles()) do
-			local hostileRoot = hostile.Character and hostile.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-			if hostileRoot then
-				local dist = (hostileRoot.Position - root.Position).Magnitude
-				if dist < nearestDist then
-					nearestDist = dist
-					nearest = hostile
-				end
-			end
-		end
-
-		if nearest then
-			local hostileRoot = nearest.Character:FindFirstChild("HumanoidRootPart") :: BasePart
-			humanoid:MoveTo(hostileRoot.Position)
-			if nearestDist <= cfg.SwipeRange then
-				local lastSwipe = state.lastAbilityUse["Swipe"] or 0
-				if now - lastSwipe >= cfg.SwipeCooldown then
-					state.lastAbilityUse["Swipe"] = now
-					local hostileHumanoid = nearest.Character:FindFirstChildOfClass("Humanoid")
-					if hostileHumanoid then
-						Deps.CombatService.ApplyDamage(player, hostileHumanoid, cfg.SwipeDamage)
-					end
-				end
-			end
-		end
-		return
-	end
-
-	if now < state.cryUntil then
-		humanoid.WalkSpeed = 4
-		return
-	end
-
-	humanoid.WalkSpeed = 8
-
-	local viewer = false
-	for _, hostile in ipairs(getAliveHostiles()) do
-		local hostileChar = hostile.Character
-		local hostileHead = hostileChar and hostileChar:FindFirstChild("Head") :: BasePart?
-		if hostileHead then
-			local toSCP = root.Position - hostileHead.Position
-			local distance = toSCP.Magnitude
-			if distance <= cfg.ViewMaxDistance then
-				local lookVector = hostileHead.CFrame.LookVector
-				local angle = math.deg(math.acos(math.clamp(lookVector.Unit:Dot(toSCP.Unit), -1, 1)))
-				if angle <= cfg.ViewConeDegrees / 2 and hasLineOfSight(hostileHead.Position, root.Position, { character, hostileChar :: Instance }) then
-					viewer = true
-					break
-				end
-			end
-		end
-	end
-
-	if viewer then
-		state.viewedSince = state.viewedSince or now
-		if now - state.viewedSince >= cfg.CalmToEnrageDelaySeconds then
-			state.enraged = true
-			state.enrageEndsAt = now + cfg.EnrageDurationSeconds
-			state.viewedSince = nil
-			humanoid.WalkSpeed = cfg.EnrageWalkSpeed
-			Deps.NotifyService.ToastAll("SCP-096 has been seen. Run.", "danger")
-		end
-	else
-		state.viewedSince = nil
 	end
 end
 
@@ -3764,19 +3309,19 @@ local function tryPhase(player: Player, state: SCPState)
 	end)
 end
 
-local function returnPocketVictim(victim: Player)
+local function returnPocketVictim(victim: Model)
 	local info = pocketVictims[victim]
 	pocketVictims[victim] = nil
 	if not info then
 		return
 	end
-	local character = victim.Character
-	if character and character:FindFirstChildOfClass("Humanoid") and character:FindFirstChildOfClass("Humanoid").Health > 0 then
-		character:PivotTo(info.returnCFrame)
+	local humanoid = victim:FindFirstChildOfClass("Humanoid")
+	if victim.Parent and humanoid and humanoid.Health > 0 then
+		victim:PivotTo(info.returnCFrame)
 	end
 end
 
-local function tryPocketDimension(player: Player, state: SCPState)
+local function tryPocketDimension(player: Player)
 	if isOnCooldown(player, "PocketDimension") then
 		return
 	end
@@ -3787,10 +3332,9 @@ local function tryPocketDimension(player: Player, state: SCPState)
 		return
 	end
 
-	local target: Player? = nil
-	for _, hostile in ipairs(getAliveHostiles()) do
-		local hostileRoot = hostile.Character and hostile.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		if hostileRoot and (hostileRoot.Position - root.Position).Magnitude <= 7 then
+	local target: HostileHandle? = nil
+	for _, hostile in ipairs(getNearbyHostileNPCs()) do
+		if (hostile.root.Position - root.Position).Magnitude <= 7 then
 			target = hostile
 			break
 		end
@@ -3803,30 +3347,22 @@ local function tryPocketDimension(player: Player, state: SCPState)
 	end
 
 	local floor = ensurePocketDimension()
-	local targetCharacter = target.Character
-	local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not targetRoot then
-		return
-	end
-
-	local returnCFrame = targetRoot.CFrame
-	pocketVictims[target] = { returnCFrame = returnCFrame, expiresAt = os.clock() + cfg.PocketDimensionDuration }
-	targetCharacter:PivotTo(floor.CFrame + Vector3.new(0, 6, 0))
-	Deps.NotifyService.Toast(target, "You are dragged into somewhere that should not exist.", "danger")
+	local returnCFrame = target.root.CFrame
+	pocketVictims[target.model] = { returnCFrame = returnCFrame, expiresAt = os.clock() + cfg.PocketDimensionDuration }
+	target.model:PivotTo(floor.CFrame + Vector3.new(0, 6, 0))
 
 	task.spawn(function()
 		local elapsed = 0
 		while elapsed < cfg.PocketDimensionDuration do
 			task.wait(1)
 			elapsed += 1
-			local humanoid = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
-			if not humanoid or humanoid.Health <= 0 then
-				pocketVictims[target] = nil
+			if not target.model.Parent or target.humanoid.Health <= 0 then
+				pocketVictims[target.model] = nil
 				return
 			end
-			Deps.CombatService.ApplyDamage(player, humanoid, cfg.PocketDimensionDamagePerTick)
+			Deps.CombatService.ApplyDamage(player, target.humanoid, cfg.PocketDimensionDamagePerTick)
 		end
-		returnPocketVictim(target)
+		returnPocketVictim(target.model)
 	end)
 end
 
@@ -3844,11 +3380,9 @@ local function updateSCP106(player: Player, state: SCPState)
 		return
 	end
 
-	for _, hostile in ipairs(getAliveHostiles()) do
-		local hostileRoot = hostile.Character and hostile.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
-		local hostileHumanoid = hostile.Character and hostile.Character:FindFirstChildOfClass("Humanoid")
-		if hostileRoot and hostileHumanoid and (hostileRoot.Position - root.Position).Magnitude <= 4 then
-			Deps.CombatService.ApplyDamage(player, hostileHumanoid, cfg.CorrodeDamagePerTick)
+	for _, hostile in ipairs(getNearbyHostileNPCs()) do
+		if (hostile.root.Position - root.Position).Magnitude <= 4 then
+			Deps.CombatService.ApplyDamage(player, hostile.humanoid, cfg.CorrodeDamagePerTick)
 			state.lastCorrodeTick = now
 			break
 		end
@@ -3858,8 +3392,6 @@ end
 -- ================================ dispatch ==================================
 
 local UPDATERS: { [string]: (Player, SCPState) -> () } = {
-	SCP173 = updateSCP173,
-	SCP096 = updateSCP096,
 	SCP106 = updateSCP106,
 }
 
@@ -3879,15 +3411,15 @@ local function onAbilityRequest(player: Player, payload: any)
 
 	if state.classId == "SCP049" then
 		if ability == "TouchOfDeath" then
-			tryTouchOfDeath(player, state)
+			tryTouchOfDeath(player)
 		elseif ability == "Reanimate" then
-			tryReanimate(player, state)
+			tryReanimate(player)
 		end
 	elseif state.classId == "SCP106" then
 		if ability == "Phase" then
 			tryPhase(player, state)
 		elseif ability == "PocketDimension" then
-			tryPocketDimension(player, state)
+			tryPocketDimension(player)
 		end
 	end
 end
@@ -3921,6 +3453,46 @@ return SCPAbilityService
 ]]></ProtectedString>
 </Properties>
 </Item>
+<Item class="ModuleScript" referent="RBX000037"><Properties>
+<string name="Name">SessionService</string>
+<ProtectedString name="Source"><![CDATA[--!strict
+-- Solo session bootstrap. The moment a player's profile loads, spawn them as
+-- whatever class they last used (Class-D on a brand new profile) and start
+-- the mission board for that class. No lobby, no round timer, no other
+-- players required - this is a solo progression game, always "on".
+
+local Players = game:GetService("Players")
+
+local SessionService = {}
+
+local Deps: any = nil
+
+local function beginSession(player: Player, profile: any)
+	local classId = profile.CurrentClassId or "DClass"
+	Deps.ClassService.SpawnCharacterForClass(player, classId)
+	Deps.MissionService.StartForPlayer(player, classId)
+end
+
+function SessionService.Init(deps: any)
+	Deps = deps
+
+	Deps.DataService.ProfileLoaded:Connect(beginSession)
+
+	-- Defensive: catch anyone whose profile finished loading before this
+	-- service's Init ran and subscribed (shouldn't normally happen given
+	-- DataStore calls yield, but costs nothing to guard against).
+	for _, player in ipairs(Players:GetPlayers()) do
+		local profile = Deps.DataService.GetProfile(player)
+		if profile and not Deps.ClassService.GetPlayerClass(player) then
+			beginSession(player, profile)
+		end
+	end
+end
+
+return SessionService
+]]></ProtectedString>
+</Properties>
+</Item>
 </Item>
 </Item>
 </Item>
@@ -3935,8 +3507,9 @@ return SCPAbilityService
 <Item class="ModuleScript" referent="RBX000044"><Properties>
 <string name="Name">ClassCardController</string>
 <ProtectedString name="Source"><![CDATA[--!strict
--- Full-screen "You are now: <class>" card shown whenever the server assigns
--- (or re-assigns) a class - round start, reinforcement wave, or death.
+-- Full-screen "You are now: <class>" card shown whenever the server (re-)
+-- spawns you as a class - first join, respawn after death, or a class change
+-- you picked from the class menu.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -3947,12 +3520,11 @@ local UIUtil = require(script.Parent.Parent.UIUtil)
 
 local ClassCardController = {}
 
-local FACTION_COLOR = {
+local TRACK_COLOR = {
 	DClass = Color3.fromRGB(196, 160, 84),
 	Foundation = Color3.fromRGB(90, 160, 230),
-	ChaosInsurgency = Color3.fromRGB(200, 60, 60),
+	Renegade = Color3.fromRGB(200, 60, 60),
 	SCP = Color3.fromRGB(180, 180, 190),
-	Spectator = Theme.SubText,
 }
 
 function ClassCardController.Init()
@@ -3974,7 +3546,7 @@ function ClassCardController.Init()
 			BorderSizePixel = 0,
 		}, { UIUtil.Corner(3) }),
 		UIUtil.New("TextLabel", {
-			Name = "FactionLabel",
+			Name = "TrackLabel",
 			Position = UDim2.new(0, 24, 0, 20),
 			Size = UDim2.new(1, -48, 0, 20),
 			BackgroundTransparency = 1,
@@ -3982,7 +3554,7 @@ function ClassCardController.Init()
 			TextColor3 = Theme.SubText,
 			TextSize = 14,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			Text = "FACTION",
+			Text = "TRACK",
 		}),
 		UIUtil.New("TextLabel", {
 			Name = "NameLabel",
@@ -4012,7 +3584,7 @@ function ClassCardController.Init()
 	card.Parent = gui
 
 	local accentBar = card:FindFirstChild("AccentBar") :: Frame
-	local factionLabel = card:FindFirstChild("FactionLabel") :: TextLabel
+	local trackLabel = card:FindFirstChild("TrackLabel") :: TextLabel
 	local nameLabel = card:FindFirstChild("NameLabel") :: TextLabel
 	local descLabel = card:FindFirstChild("DescLabel") :: TextLabel
 
@@ -4023,10 +3595,10 @@ function ClassCardController.Init()
 			return
 		end
 
-		local color = FACTION_COLOR[payload.faction] or Theme.Accent
+		local color = TRACK_COLOR[payload.track] or Theme.Accent
 		accentBar.BackgroundColor3 = color
-		factionLabel.Text = string.upper(tostring(payload.faction or ""))
-		factionLabel.TextColor3 = color
+		trackLabel.Text = string.upper(tostring(payload.track or ""))
+		trackLabel.TextColor3 = color
 		nameLabel.Text = tostring(payload.displayName or "")
 		descLabel.Text = tostring(payload.description or "")
 
@@ -4056,6 +3628,207 @@ return ClassCardController
 </Properties>
 </Item>
 <Item class="ModuleScript" referent="RBX000045"><Properties>
+<string name="Name">ClassMenuController</string>
+<ProtectedString name="Source"><![CDATA[--!strict
+-- Press C to open the class menu: every class you've unlocked (profile
+-- Level >= ClassConfig.UnlockLevel) is selectable, locked ones show the
+-- level you still need. This is the only way to change class - there's no
+-- automatic reassignment anymore, you pick your own progression path.
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ClassConfig = require(ReplicatedStorage.Shared.Config.ClassConfig)
+local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
+local Theme = require(script.Parent.Parent.Theme)
+local UIUtil = require(script.Parent.Parent.UIUtil)
+
+local ClassMenuController = {}
+
+function ClassMenuController.Init()
+	local player = Players.LocalPlayer
+	local currentClassId: string? = nil
+
+	local gui = UIUtil.ScreenGui("ClassMenu")
+	gui.DisplayOrder = 40
+
+	local panel = UIUtil.New("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 420, 0, 460),
+		BackgroundColor3 = Theme.Background,
+		BackgroundTransparency = 0.05,
+		Visible = false,
+	}, {
+		UIUtil.Corner(12),
+		UIUtil.Stroke(Theme.Accent, 1),
+		UIUtil.New("TextLabel", {
+			Name = "Title",
+			Position = UDim2.new(0, 16, 0, 12),
+			Size = UDim2.new(1, -32, 0, 30),
+			BackgroundTransparency = 1,
+			Font = Theme.FontBlack,
+			TextColor3 = Theme.Text,
+			TextSize = 22,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = "Career Path",
+		}),
+		UIUtil.New("TextLabel", {
+			Name = "Hint",
+			Position = UDim2.new(0, 16, 0, 42),
+			Size = UDim2.new(1, -32, 0, 20),
+			BackgroundTransparency = 1,
+			Font = Theme.Font,
+			TextColor3 = Theme.SubText,
+			TextSize = 13,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = "Press C to close",
+		}),
+		UIUtil.New("ScrollingFrame", {
+			Name = "List",
+			Position = UDim2.new(0, 12, 0, 70),
+			Size = UDim2.new(1, -24, 1, -82),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ScrollBarThickness = 6,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		}, {
+			UIUtil.New("UIListLayout", {
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 6),
+			}),
+		}),
+	})
+	panel.Parent = gui
+
+	local list = panel:FindFirstChild("List") :: ScrollingFrame
+	local rows: { [string]: Frame } = {}
+
+	local function buildRows()
+		for _, classId in ipairs(ClassConfig._UnlockOrder) do
+			local def = ClassConfig[classId]
+			local row = UIUtil.New("Frame", {
+				Size = UDim2.new(1, 0, 0, 56),
+				BackgroundColor3 = Theme.Panel,
+				BackgroundTransparency = 0.1,
+			}, {
+				UIUtil.Corner(8),
+				UIUtil.New("TextLabel", {
+					Name = "Name",
+					Position = UDim2.new(0, 12, 0, 6),
+					Size = UDim2.new(1, -100, 0, 22),
+					BackgroundTransparency = 1,
+					Font = Theme.FontBold,
+					TextColor3 = Theme.Text,
+					TextSize = 16,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Text = def.DisplayName,
+				}),
+				UIUtil.New("TextLabel", {
+					Name = "Requirement",
+					Position = UDim2.new(0, 12, 0, 28),
+					Size = UDim2.new(1, -100, 0, 20),
+					BackgroundTransparency = 1,
+					Font = Theme.Font,
+					TextColor3 = Theme.SubText,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Text = `Requires level {def.UnlockLevel}`,
+				}),
+				UIUtil.New("TextButton", {
+					Name = "SelectButton",
+					AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, -10, 0.5, 0),
+					Size = UDim2.new(0, 80, 0, 34),
+					BackgroundColor3 = Theme.Accent,
+					Font = Theme.FontBold,
+					TextColor3 = Color3.new(1, 1, 1),
+					TextSize = 14,
+					Text = "Select",
+				}, { UIUtil.Corner(6) }),
+			})
+			row.Parent = list
+			rows[classId] = row
+
+			local button = row:FindFirstChild("SelectButton") :: TextButton
+			button.Activated:Connect(function()
+				if button.Text == "Select" then
+					Remotes.RequestClassChange:FireServer({ classId = classId })
+				end
+			end)
+		end
+	end
+
+	local function refreshLocks()
+		local leaderstats = player:FindFirstChild("leaderstats")
+		local levelValue = leaderstats and leaderstats:FindFirstChild("Level") :: IntValue?
+		local level = levelValue and levelValue.Value or 1
+
+		for classId, row in pairs(rows) do
+			local def = ClassConfig[classId]
+			local unlocked = level >= def.UnlockLevel
+			local isCurrent = classId == currentClassId
+
+			local button = row:FindFirstChild("SelectButton") :: TextButton
+			local requirement = row:FindFirstChild("Requirement") :: TextLabel
+
+			if isCurrent then
+				button.Text = "Current"
+				button.BackgroundColor3 = Theme.Success
+				button.AutoButtonColor = false
+			elseif unlocked then
+				button.Text = "Select"
+				button.BackgroundColor3 = Theme.Accent
+				button.AutoButtonColor = true
+			else
+				button.Text = "Locked"
+				button.BackgroundColor3 = Theme.PanelLight
+				button.AutoButtonColor = false
+			end
+
+			requirement.Text = unlocked and "Unlocked" or `Requires level {def.UnlockLevel} (you are {level})`
+			requirement.TextColor3 = unlocked and Theme.Success or Theme.SubText
+		end
+	end
+
+	buildRows()
+
+	local leaderstats = player:WaitForChild("leaderstats", 10)
+	local levelValue = leaderstats and leaderstats:WaitForChild("Level", 10) :: IntValue?
+	if levelValue then
+		levelValue:GetPropertyChangedSignal("Value"):Connect(refreshLocks)
+	end
+	refreshLocks()
+
+	Remotes.ClassAssigned.OnClientEvent:Connect(function(payload: any)
+		if typeof(payload) == "table" then
+			currentClassId = payload.classId
+			refreshLocks()
+		end
+	end)
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.C then
+			panel.Visible = not panel.Visible
+			if panel.Visible then
+				refreshLocks()
+			end
+		end
+	end)
+
+	gui.Parent = player:WaitForChild("PlayerGui")
+end
+
+return ClassMenuController
+]]></ProtectedString>
+</Properties>
+</Item>
+<Item class="ModuleScript" referent="RBX000046"><Properties>
 <string name="Name">CombatController</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Turns raw input into combat remotes. No Tool ever carries a script - this
@@ -4250,7 +4023,7 @@ return CombatController
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000046"><Properties>
+<Item class="ModuleScript" referent="RBX000047"><Properties>
 <string name="Name">HUDController</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Bottom-center health bar. Reads the local character's Humanoid directly -
@@ -4336,12 +4109,12 @@ return HUDController
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000047"><Properties>
+<Item class="ModuleScript" referent="RBX000048"><Properties>
 <string name="Name">MissionController</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Persistent top-left mission tracker: current mission name, active
 -- objective text, and a completion flash. Driven entirely by MissionAssigned
--- / MissionProgress events for this player's squad.
+-- / MissionProgress events for this player.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -4431,7 +4204,7 @@ return MissionController
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000048"><Properties>
+<Item class="ModuleScript" referent="RBX000049"><Properties>
 <string name="Name">NotifyController</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Renders server-sent toasts (Remotes.Notify) as stacked, auto-fading cards
@@ -4528,143 +4301,6 @@ function NotifyController.Init()
 end
 
 return NotifyController
-]]></ProtectedString>
-</Properties>
-</Item>
-<Item class="ModuleScript" referent="RBX000049"><Properties>
-<string name="Name">RoundController</string>
-<ProtectedString name="Source"><![CDATA[--!strict
--- Top-center round-state banner: intermission countdown, live round timer,
--- and a big result card when the round ends. Everything here is derived
--- straight from RoundStateChanged payloads - no local prediction.
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
-local Enums = require(ReplicatedStorage.Shared.Modules.Enums)
-local Theme = require(script.Parent.Parent.Theme)
-local UIUtil = require(script.Parent.Parent.UIUtil)
-
-local RoundController = {}
-
-local RESULT_TEXT: { [string]: { text: string, color: Color3 } } = {
-	[Enums.RoundEndReason.FoundationVictory] = { text = "FOUNDATION VICTORY", color = Theme.Info },
-	[Enums.RoundEndReason.ChaosVictory] = { text = "CHAOS INSURGENCY VICTORY", color = Theme.Danger },
-	[Enums.RoundEndReason.SCPVictory] = { text = "CONTAINMENT FAILED - SCP VICTORY", color = Theme.Danger },
-	[Enums.RoundEndReason.TimeLimit] = { text = "TIME LIMIT REACHED", color = Theme.Warning },
-	[Enums.RoundEndReason.Warhead] = { text = "ALPHA WARHEAD DETONATED", color = Theme.Danger },
-	[Enums.RoundEndReason.NotEnoughPlayers] = { text = "NOT ENOUGH PLAYERS", color = Theme.Warning },
-}
-
-function RoundController.Init()
-	local gui = UIUtil.ScreenGui("RoundUI")
-	gui.DisplayOrder = 20
-
-	local banner = UIUtil.New("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 12),
-		Size = UDim2.new(0, 260, 0, 44),
-		BackgroundColor3 = Theme.Panel,
-		BackgroundTransparency = 0.1,
-	}, {
-		UIUtil.Corner(8),
-		UIUtil.New("TextLabel", {
-			Name = "Label",
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1,
-			Font = Theme.FontBold,
-			TextColor3 = Theme.Text,
-			TextSize = 18,
-			Text = "Waiting for players...",
-		}),
-	})
-	banner.Parent = gui
-
-	local resultCard = UIUtil.New("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.4, 0),
-		Size = UDim2.new(0, 560, 0, 140),
-		BackgroundColor3 = Theme.Background,
-		BackgroundTransparency = 1,
-		Visible = false,
-	}, {
-		UIUtil.Corner(12),
-		UIUtil.Stroke(Theme.Accent, 2),
-		UIUtil.New("TextLabel", {
-			Name = "ResultLabel",
-			Size = UDim2.new(1, -40, 1, -20),
-			Position = UDim2.new(0, 20, 0, 10),
-			BackgroundTransparency = 1,
-			Font = Theme.FontBlack,
-			TextColor3 = Theme.Text,
-			TextSize = 30,
-			TextWrapped = true,
-			Text = "",
-		}),
-	})
-	resultCard.Parent = gui
-
-	local label = banner:FindFirstChild("Label") :: TextLabel
-	local resultLabel = resultCard:FindFirstChild("ResultLabel") :: TextLabel
-
-	-- The server only broadcasts the round timer once at Active start (and on
-	-- each win-condition tick, which isn't timer-related); we count the
-	-- remaining seconds down locally between updates rather than re-fetching
-	-- every second over the network.
-	local activeSecondsLeft: number? = nil
-
-	RunService.Heartbeat:Connect(function(dt: number)
-		if activeSecondsLeft == nil then
-			return
-		end
-		activeSecondsLeft = math.max(0, activeSecondsLeft - dt)
-		label.Text = `Round time: {UIUtil.FormatClock(activeSecondsLeft)}`
-	end)
-
-	Remotes.RoundStateChanged.OnClientEvent:Connect(function(payload: any)
-		if typeof(payload) ~= "table" then
-			return
-		end
-
-		if payload.state == Enums.RoundState.Lobby then
-			activeSecondsLeft = nil
-			banner.Visible = true
-			resultCard.Visible = false
-			label.Text = "Waiting for players..."
-		elseif payload.state == Enums.RoundState.Intermission then
-			activeSecondsLeft = nil
-			banner.Visible = true
-			resultCard.Visible = false
-			if payload.reason == Enums.RoundEndReason.NotEnoughPlayers then
-				label.Text = "Not enough players - waiting..."
-			else
-				label.Text = `Next round in {payload.timeLeft or 0}s`
-			end
-		elseif payload.state == Enums.RoundState.Active then
-			banner.Visible = true
-			resultCard.Visible = false
-			if payload.timeLeft then
-				activeSecondsLeft = payload.timeLeft
-				label.Text = `Round time: {UIUtil.FormatClock(activeSecondsLeft)}`
-			end
-		elseif payload.state == Enums.RoundState.Ending then
-			activeSecondsLeft = nil
-			banner.Visible = false
-			local info = RESULT_TEXT[payload.reason] or { text = "ROUND OVER", color = Theme.Text }
-			resultLabel.Text = info.text
-			resultLabel.TextColor3 = info.color
-			resultCard.Visible = true
-			resultCard.BackgroundTransparency = 1
-			UIUtil.Tween(resultCard, TweenInfo.new(0.3), { BackgroundTransparency = 0.05 })
-		end
-	end)
-
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-end
-
-return RoundController
 ]]></ProtectedString>
 </Properties>
 </Item>
@@ -4815,79 +4451,8 @@ return SCPAbilityController
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000051"><Properties>
-<string name="Name">WarheadController</string>
-<ProtectedString name="Source"><![CDATA[--!strict
--- Big red countdown banner while the Alpha Warhead is armed. Counts down
--- locally between updates like RoundController does for the round timer.
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
-local Theme = require(script.Parent.Parent.Theme)
-local UIUtil = require(script.Parent.Parent.UIUtil)
-
-local WarheadController = {}
-
-function WarheadController.Init()
-	local gui = UIUtil.ScreenGui("WarheadUI")
-	gui.DisplayOrder = 25
-
-	local banner = UIUtil.New("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 64),
-		Size = UDim2.new(0, 320, 0, 40),
-		BackgroundColor3 = Theme.Danger,
-		BackgroundTransparency = 0.1,
-		Visible = false,
-	}, {
-		UIUtil.Corner(6),
-		UIUtil.New("TextLabel", {
-			Name = "Label",
-			Size = UDim2.new(1, 0, 1, 0),
-			BackgroundTransparency = 1,
-			Font = Theme.FontBlack,
-			TextColor3 = Color3.new(1, 1, 1),
-			TextSize = 18,
-			Text = "WARHEAD ARMED",
-		}),
-	})
-	banner.Parent = gui
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-
-	local label = banner:FindFirstChild("Label") :: TextLabel
-	local secondsLeft: number? = nil
-
-	RunService.Heartbeat:Connect(function(dt: number)
-		if secondsLeft == nil then
-			return
-		end
-		secondsLeft = math.max(0, secondsLeft - dt)
-		label.Text = `WARHEAD DETONATION IN {UIUtil.FormatClock(secondsLeft)}`
-	end)
-
-	Remotes.WarheadUpdate.OnClientEvent:Connect(function(payload: any)
-		if typeof(payload) ~= "table" then
-			return
-		end
-		if payload.active then
-			secondsLeft = payload.duration or 0
-			banner.Visible = true
-		else
-			secondsLeft = nil
-			banner.Visible = false
-		end
-	end)
-end
-
-return WarheadController
-]]></ProtectedString>
-</Properties>
 </Item>
-</Item>
-<Item class="LocalScript" referent="RBX000052"><Properties>
+<Item class="LocalScript" referent="RBX000051"><Properties>
 <string name="Name">Main</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Client bootstrap: requires every controller and initializes it. Controllers
@@ -4898,13 +4463,12 @@ local Controllers = script.Parent.Controllers
 
 local CONTROLLER_NAMES = {
 	"NotifyController",
-	"RoundController",
 	"ClassCardController",
+	"ClassMenuController",
 	"MissionController",
 	"HUDController",
 	"CombatController",
 	"SCPAbilityController",
-	"WarheadController",
 }
 
 for _, name in ipairs(CONTROLLER_NAMES) do
@@ -4917,7 +4481,7 @@ end
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000053"><Properties>
+<Item class="ModuleScript" referent="RBX000052"><Properties>
 <string name="Name">Theme</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Shared look-and-feel constants for every client-side UI controller.
@@ -4941,7 +4505,7 @@ return {
 ]]></ProtectedString>
 </Properties>
 </Item>
-<Item class="ModuleScript" referent="RBX000054"><Properties>
+<Item class="ModuleScript" referent="RBX000053"><Properties>
 <string name="Name">UIUtil</string>
 <ProtectedString name="Source"><![CDATA[--!strict
 -- Small constructor helpers so controllers build UI declaratively instead of
@@ -5022,9 +4586,9 @@ return UIUtil
 </Item>
 </Item>
 </Item>
-<Item class="StarterCharacterScripts" referent="RBX000055"><Properties><string name="Name">StarterCharacterScripts</string></Properties>
+<Item class="StarterCharacterScripts" referent="RBX000054"><Properties><string name="Name">StarterCharacterScripts</string></Properties>
 </Item>
 </Item>
-<Item class="Workspace" referent="RBX000056"><Properties><string name="Name">Workspace</string></Properties>
+<Item class="Workspace" referent="RBX000055"><Properties><string name="Name">Workspace</string></Properties>
 </Item>
 </roblox>

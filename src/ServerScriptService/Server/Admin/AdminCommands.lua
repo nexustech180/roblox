@@ -1,8 +1,8 @@
 --!strict
--- Minimal chat-command admin panel for testing/moderation. The round itself
--- never needs these (see RoundService for the fully automatic loop) - they
--- exist purely so a developer or trusted moderator can nudge things along
--- without republishing the place.
+-- Minimal chat-command admin panel for testing/moderation. The game itself
+-- never needs these (spawning, missions, and leveling all run automatically -
+-- see SessionService) - they exist purely so a developer can jump straight to
+-- a given level/class to test progression without grinding for real.
 
 local Players = game:GetService("Players")
 
@@ -40,17 +40,8 @@ local function findPlayerByName(partialName: string): Player?
 end
 
 local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
-	forcestart = function(caller)
-		Deps.RoundService.ForceStartIntermission()
-		Deps.NotifyService.Toast(caller, "Forced intermission start.", "success")
-	end,
-
-	endround = function(caller, args)
-		local reason = args[1] or "FoundationVictory"
-		Deps.RoundService.ForceEndRound(reason)
-		Deps.NotifyService.Toast(caller, `Forced round end: {reason}`, "success")
-	end,
-
+	-- Bypasses the level gate entirely (unlike the in-game class menu) so you
+	-- can test any class's kit immediately. Persists like a normal pick.
 	setclass = function(caller, args)
 		local target = args[1] and findPlayerByName(args[1])
 		local classId = args[2]
@@ -58,7 +49,9 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 			Deps.NotifyService.Toast(caller, "Usage: /setclass <player> <classId>", "warning")
 			return
 		end
+		Deps.DataService.SetCurrentClass(target, classId)
 		Deps.ClassService.SpawnCharacterForClass(target, classId)
+		Deps.MissionService.OnClassChanged(target, classId)
 		Deps.NotifyService.Toast(caller, `Set {target.Name} to {classId}.`, "success")
 	end,
 
@@ -71,6 +64,18 @@ local COMMANDS: { [string]: (caller: Player, args: { string }) -> () } = {
 		end
 		Deps.DataService.AddCredits(target, amount)
 		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} credits.`, "success")
+	end,
+
+	addxp = function(caller, args)
+		local target = args[1] and findPlayerByName(args[1])
+		local amount = args[2] and tonumber(args[2])
+		if not target or not amount then
+			Deps.NotifyService.Toast(caller, "Usage: /addxp <player> <amount>", "warning")
+			return
+		end
+		Deps.DataService.AddXP(target, amount)
+		local profile = Deps.DataService.GetProfile(target)
+		Deps.NotifyService.Toast(caller, `Gave {target.Name} {amount} XP (now level {profile and profile.Level or "?"}).`, "success")
 	end,
 }
 

@@ -1,7 +1,7 @@
 --!strict
 -- Persistent top-left mission tracker: current mission name, active
 -- objective text, and a completion flash. Driven entirely by MissionAssigned
--- / MissionProgress events for this player's squad.
+-- / MissionProgress events for this player.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

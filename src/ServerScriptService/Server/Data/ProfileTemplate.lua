@@ -9,9 +9,9 @@ export type Profile = {
 	Kills: number,
 	Deaths: number,
 	MissionsCompleted: number,
-	RoundsPlayed: number,
-	SCPKills: number, -- kills recorded while playing an SCP class
-	Escapes: number, -- successful D-Class "reach the surface" completions
+	SCPKills: number, -- kills recorded while playing an SCP prestige class
+	Escapes: number, -- flavor stat: "reach the surface"-style objective completions
+	CurrentClassId: string, -- persists across sessions so you resume as whatever you last picked
 	SchemaVersion: number,
 }
 
@@ -22,10 +22,10 @@ local ProfileTemplate: Profile = {
 	Kills = 0,
 	Deaths = 0,
 	MissionsCompleted = 0,
-	RoundsPlayed = 0,
 	SCPKills = 0,
 	Escapes = 0,
-	SchemaVersion = 1,
+	CurrentClassId = "DClass",
+	SchemaVersion = 2,
 }
 
 return ProfileTemplate

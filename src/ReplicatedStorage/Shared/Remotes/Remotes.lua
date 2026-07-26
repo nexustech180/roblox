@@ -9,10 +9,10 @@ local RunService = game:GetService("RunService")
 local folder = script.Parent :: Folder
 
 local EVENT_NAMES = {
-	"ClassAssigned", -- server -> client: { classId, spawnCFrame }
-	"RoundStateChanged", -- server -> client: { state, payload }
-	"MissionAssigned", -- server -> client: { missionId, squadId }
-	"MissionProgress", -- server -> client: { missionId, objectiveIndex, complete }
+	"ClassAssigned", -- server -> client: { classId, displayName, description, track, isSCP }
+	"RequestClassChange", -- client -> server: { classId }
+	"MissionAssigned", -- server -> client: { missionId, displayName, objectiveText, objectiveIndex, objectiveCount }
+	"MissionProgress", -- server -> client: { missionId, objectiveIndex, objectiveText, complete }
 	"WeaponFire", -- client -> server: { toolId, origin, direction }
 	"WeaponReload", -- client -> server: { toolId }
 	"UseConsumable", -- client -> server: { toolId }
@@ -22,8 +22,7 @@ local EVENT_NAMES = {
 	"SCPAbility", -- client -> server: { ability, ... }
 	"SCPAbilityCooldown", -- server -> client: { ability, duration }
 	"Notify", -- server -> client: { text, kind }
-	"WarheadUpdate", -- server -> client: { active, timeLeft }
-	"InventoryUpdated", -- server -> client: { equipped, ammo }
+	"InventoryUpdated", -- server -> client: { equipped, ammo, reserve }
 }
 
 local FUNCTION_NAMES = {

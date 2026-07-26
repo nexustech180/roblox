@@ -11,6 +11,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ProfileTemplate = require(script.Parent.Parent.Data.ProfileTemplate)
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Signal = require(ReplicatedStorage.Shared.Modules.Signal)
 
 type Profile = ProfileTemplate.Profile
@@ -60,7 +61,7 @@ local function mergeMissingKeys(profile: { [string]: any }, template: { [string]
 end
 
 local function xpRequiredForLevel(level: number): number
-	return 100 * level
+	return math.floor(GameConfig.XPCurveBase * level ^ GameConfig.XPCurveExponent)
 end
 
 local function recomputeLevel(profile: Profile)
@@ -194,6 +195,14 @@ function DataService.AddXP(player: Player, amount: number)
 		DataService.LeveledUp:Fire(player, newLevel)
 	end
 	syncLeaderstats(player, profile)
+end
+
+function DataService.SetCurrentClass(player: Player, classId: string)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	profile.CurrentClassId = classId
 end
 
 function DataService.IncrementStat(player: Player, statName: string, amount: number?)

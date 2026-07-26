@@ -1,8 +1,10 @@
 --!strict
--- Groups players into squads (see GameConfig.SquadSize) and runs the mission
--- board: assigns each squad an objective chain from MissionConfig, tracks
--- progress against world geometry (tagged zones/terminals) and kills, pays
--- out rewards, then loops a fresh mission so there is always something to do.
+-- Runs the solo mission board: draws missions for the player's current class
+-- from a shuffled "bag" (no repeats until every mission in the pool has come
+-- up once, so you keep grinding the same small pool without ever getting the
+-- exact same mission twice in a row), scales objective counts/durations/
+-- rewards up with level, and tracks progress against world geometry (tagged
+-- zones/terminals) or spawned NPCs.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
@@ -15,267 +17,239 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes.Remotes)
 type Objective = MissionConfig.Objective
 type MissionDefinition = MissionConfig.MissionDefinition
 
-type Squad = {
-	id: number,
-	faction: string,
-	members: { Player },
+type LiveObjective = {
+	Type: string,
+	ZoneTag: string?,
+	PartTag: string?,
+	Count: number?,
+	DurationSeconds: number?,
+	Description: string,
+}
+
+type PlayerState = {
+	classId: string,
 	missionDef: MissionDefinition?,
+	liveObjectives: { LiveObjective },
 	objectiveIndex: number,
-	eliminateProgress: number,
 	objectiveToken: number,
+	npcProgress: number,
+	activeNPCs: { Model },
+	bag: { string },
+	lastMissionId: string?,
 }
 
 local MissionService = {}
 
 local Deps: any = nil
 
-local squads: { [number]: Squad } = {}
-local playerSquad: { [Player]: number } = {}
-local nextSquadId = 1
+local states: { [Player]: PlayerState } = {}
 
--- Every ZoneTag / PartTag referenced anywhere in MissionConfig, discovered once
--- at Init so we only ever set up listeners for tags the design actually uses.
-local zoneTagListeners: { [string]: boolean } = {}
-local partTagListeners: { [string]: boolean } = {}
-
-local function getSquad(player: Player): Squad?
-	local id = playerSquad[player]
-	return id and squads[id]
+local function shuffled(list: { string }): { string }
+	local copy = table.clone(list)
+	for i = #copy, 2, -1 do
+		local j = math.random(1, i)
+		copy[i], copy[j] = copy[j], copy[i]
+	end
+	return copy
 end
 
-local function currentObjective(squad: Squad): Objective?
-	if not squad.missionDef then
-		return nil
-	end
-	return squad.missionDef.Objectives[squad.objectiveIndex]
+--- How much harder/more rewarding a mission should be at the player's
+--- current level. Every DifficultyLevelStep levels adds DifficultyScalePerStep.
+local function difficultyScale(level: number): number
+	return 1 + math.floor((level - 1) / GameConfig.DifficultyLevelStep) * GameConfig.DifficultyScalePerStep
 end
 
-local function broadcastProgress(squad: Squad, complete: boolean)
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			Remotes.MissionProgress:FireClient(member, {
-				missionId = squad.missionDef and squad.missionDef.Id,
-				objectiveIndex = squad.objectiveIndex,
-				objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-				complete = complete,
-			})
-		end
+local function buildLiveObjectives(def: MissionDefinition, scale: number): { LiveObjective }
+	local live = {}
+	for _, objective in ipairs(def.Objectives) do
+		table.insert(live, {
+			Type = objective.Type,
+			ZoneTag = objective.ZoneTag,
+			PartTag = objective.PartTag,
+			Count = objective.BaseCount and math.max(1, math.ceil(objective.BaseCount * scale)),
+			DurationSeconds = objective.BaseDurationSeconds and math.ceil(objective.BaseDurationSeconds * scale),
+			Description = objective.Description,
+		})
 	end
+	return live
 end
 
-local function broadcastAssigned(squad: Squad)
-	local def = squad.missionDef
-	if not def then
-		return
-	end
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			Remotes.MissionAssigned:FireClient(member, {
-				missionId = def.Id,
-				displayName = def.DisplayName,
-				squadId = squad.id,
-				objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-				objectiveIndex = squad.objectiveIndex,
-				objectiveCount = #def.Objectives,
-			})
-		end
-	end
+local function currentObjective(state: PlayerState): LiveObjective?
+	return state.liveObjectives[state.objectiveIndex]
 end
 
-local advanceObjective: (squad: Squad) -> ()
-local assignMissionToSquad: (squad: Squad) -> ()
-local broadcastAssignedOne: (player: Player, squad: Squad) -> ()
-
---- SurviveTime objectives have no world trigger to complete them - they just
---- need "at least one squad member alive when the clock runs out". The token
---- check guards against a stale timer firing after the squad's mission (or
---- objective) has already moved on.
-local function scheduleSurviveTimeCheck(squad: Squad, durationSeconds: number)
-	local token = squad.objectiveToken
-	task.delay(durationSeconds, function()
-		if squads[squad.id] ~= squad or squad.objectiveToken ~= token then
-			return
+local function clearActiveNPCs(state: PlayerState)
+	for _, npc in ipairs(state.activeNPCs) do
+		if npc.Parent then
+			npc:Destroy()
 		end
-		for _, member in ipairs(squad.members) do
-			if Deps.ClassService.IsAlive(member) then
-				advanceObjective(squad)
-				return
-			end
-		end
-	end)
+	end
+	table.clear(state.activeNPCs)
 end
 
-local function completeMission(squad: Squad)
-	local def = squad.missionDef
-	if not def then
-		return
-	end
-	for _, member in ipairs(squad.members) do
-		if member.Parent then
-			if Deps.DataService then
-				Deps.DataService.AddCredits(member, def.RewardCredits)
-				Deps.DataService.AddXP(member, def.RewardXP)
-				Deps.DataService.IncrementStat(member, "MissionsCompleted", 1)
-			end
-			Deps.NotifyService.Toast(member, `Mission complete: {def.DisplayName} (+{def.RewardCredits} credits)`, "success")
-		end
-	end
-	broadcastProgress(squad, true)
-
-	task.delay(4, function()
-		if squads[squad.id] == squad and Deps.RoundService.GetState() == "Active" then
-			assignMissionToSquad(squad)
-		end
-	end)
-end
-
-function advanceObjective(squad: Squad)
-	squad.objectiveIndex += 1
-	squad.eliminateProgress = 0
-	squad.objectiveToken += 1
-
-	if not squad.missionDef or squad.objectiveIndex > #squad.missionDef.Objectives then
-		completeMission(squad)
-		return
-	end
-
-	broadcastProgress(squad, false)
-
-	local objective = currentObjective(squad)
-	if objective and objective.Type == "SurviveTime" and objective.DurationSeconds then
-		scheduleSurviveTimeCheck(squad, objective.DurationSeconds)
-	end
-end
-
-function assignMissionToSquad(squad: Squad)
-	local fullPool = MissionConfig._PoolByFaction[squad.faction]
-	if not fullPool or #fullPool == 0 then
-		return
-	end
-
-	-- Missions like EliminateCount need actual hostile targets to exist, which
-	-- isn't plausible with a tiny server population - filter those out rather
-	-- than handing a squad an objective nobody can ever complete. Falls back
-	-- to the full pool if filtering would leave nothing assignable.
-	local totalPlayers = #Players:GetPlayers()
-	local eligiblePool = {}
-	for _, id in ipairs(fullPool) do
-		if totalPlayers >= (MissionConfig[id].MinPlayers or 1) then
-			table.insert(eligiblePool, id)
-		end
-	end
-	local pool = #eligiblePool > 0 and eligiblePool or fullPool
-
-	local missionId = pool[math.random(1, #pool)]
-	squad.missionDef = MissionConfig[missionId]
-	squad.objectiveIndex = 1
-	squad.eliminateProgress = 0
-	squad.objectiveToken += 1
-
-	broadcastAssigned(squad)
-
-	local objective = currentObjective(squad)
-	if objective and objective.Type == "SurviveTime" and objective.DurationSeconds then
-		scheduleSurviveTimeCheck(squad, objective.DurationSeconds)
-	end
-end
-
-local function createSquad(faction: string, members: { Player }): Squad
-	local squad: Squad = {
-		id = nextSquadId,
-		faction = faction,
-		members = members,
-		missionDef = nil,
-		objectiveIndex = 1,
-		eliminateProgress = 0,
-		objectiveToken = 0,
-	}
-	nextSquadId += 1
-	squads[squad.id] = squad
-	for _, member in ipairs(members) do
-		playerSquad[member] = squad.id
-	end
-	return squad
-end
-
---- Forms squads for any of `players` not already in one, and tops up
---- under-strength existing squads for `faction` before creating new ones.
---- Safe to call repeatedly (e.g. every time a reinforcement wave spawns).
-function MissionService.FormSquadsForFaction(faction: string, players: { Player })
-	local unassigned = {}
-	for _, player in ipairs(players) do
-		if not playerSquad[player] and player.Parent then
-			table.insert(unassigned, player)
-		end
-	end
-	if #unassigned == 0 then
-		return
-	end
-
-	for _, squad in pairs(squads) do
-		if squad.faction == faction then
-			while #squad.members < GameConfig.SquadSize and #unassigned > 0 do
-				local player = table.remove(unassigned) :: Player
-				table.insert(squad.members, player)
-				playerSquad[player] = squad.id
-				broadcastAssignedOne(player, squad)
-			end
-		end
-	end
-
-	while #unassigned > 0 do
-		local members = {}
-		for _ = 1, math.min(GameConfig.SquadSize, #unassigned) do
-			table.insert(members, table.remove(unassigned))
-		end
-		local squad = createSquad(faction, members)
-		assignMissionToSquad(squad)
-	end
-end
-
-function broadcastAssignedOne(player, squad)
-	local def = squad.missionDef
+local function broadcastAssigned(player: Player, state: PlayerState)
+	local def = state.missionDef
 	if not def or not player.Parent then
 		return
 	end
+	local objective = currentObjective(state)
 	Remotes.MissionAssigned:FireClient(player, {
 		missionId = def.Id,
 		displayName = def.DisplayName,
-		squadId = squad.id,
-		objectiveText = currentObjective(squad) and currentObjective(squad).Description or nil,
-		objectiveIndex = squad.objectiveIndex,
-		objectiveCount = #def.Objectives,
+		objectiveText = objective and objective.Description,
+		objectiveIndex = state.objectiveIndex,
+		objectiveCount = #state.liveObjectives,
 	})
 end
 
---- Called by ClassService whenever a hostile kill lands, to progress any
---- EliminateCount objective the killer's squad might currently have.
-function MissionService.NotifyKill(killer: Player, victim: Player)
-	local squad = getSquad(killer)
-	if not squad then
+local function broadcastProgress(player: Player, state: PlayerState, complete: boolean, extra: string?)
+	if not player.Parent then
 		return
 	end
-	local objective = currentObjective(squad)
-	if not objective or objective.Type ~= "EliminateCount" then
+	local objective = currentObjective(state)
+	Remotes.MissionProgress:FireClient(player, {
+		missionId = state.missionDef and state.missionDef.Id,
+		objectiveIndex = state.objectiveIndex,
+		objectiveText = extra or (objective and objective.Description),
+		complete = complete,
+	})
+end
+
+local advanceObjective: (player: Player, state: PlayerState) -> ()
+local assignNextMission: (player: Player) -> ()
+local beginCurrentObjective: (player: Player, state: PlayerState) -> ()
+
+local function completeMission(player: Player, state: PlayerState)
+	local def = state.missionDef
+	if not def then
 		return
 	end
-	local victimFaction = Deps.ClassService.GetPlayerFaction(victim)
-	if victimFaction ~= objective.TargetFaction then
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	local scale = difficultyScale(level)
+	local credits = math.ceil(def.BaseRewardCredits * scale)
+	local xp = math.ceil(def.BaseRewardXP * scale)
+
+	if Deps.DataService then
+		Deps.DataService.AddCredits(player, credits)
+		Deps.DataService.AddXP(player, xp)
+		Deps.DataService.IncrementStat(player, "MissionsCompleted", 1)
+	end
+	Deps.NotifyService.Toast(player, `Mission complete: {def.DisplayName} (+{credits} credits, +{xp} XP)`, "success")
+	broadcastProgress(player, state, true)
+
+	state.lastMissionId = def.Id
+	task.delay(3, function()
+		if states[player] == state and player.Parent then
+			assignNextMission(player)
+		end
+	end)
+end
+
+function advanceObjective(player, state)
+	clearActiveNPCs(state)
+	state.objectiveIndex += 1
+	state.npcProgress = 0
+	state.objectiveToken += 1
+
+	if state.objectiveIndex > #state.liveObjectives then
+		completeMission(player, state)
 		return
 	end
-	squad.eliminateProgress += 1
-	broadcastProgress(squad, false)
-	if squad.eliminateProgress >= (objective.Count or 1) then
-		advanceObjective(squad)
+
+	broadcastProgress(player, state, false)
+	beginCurrentObjective(player, state)
+end
+
+function beginCurrentObjective(player, state)
+	local objective = currentObjective(state)
+	if not objective then
+		return
+	end
+
+	if objective.Type == "SurviveTime" and objective.DurationSeconds then
+		local token = state.objectiveToken
+		task.delay(objective.DurationSeconds, function()
+			if states[player] == state and state.objectiveToken == token and player.Parent then
+				advanceObjective(player, state)
+			end
+		end)
+	elseif objective.Type == "EliminateNPCCount" and objective.Count then
+		local character = player.Character
+		local origin = character and character:FindFirstChild("HumanoidRootPart")
+		local center = (origin :: BasePart?) and (origin :: BasePart).Position or Vector3.new(0, 5, 0)
+		local token = state.objectiveToken
+
+		local npcConfig = {
+			Health = GameConfig.NPCBaseHealth * difficultyScale((Deps.DataService.GetProfile(player) or { Level = 1 }).Level),
+			Damage = GameConfig.NPCBaseDamage,
+			WalkSpeed = GameConfig.NPCBaseWalkSpeed,
+			AttackRange = 5,
+			AttackCooldown = 1.2,
+		}
+
+		for _ = 1, objective.Count do
+			local offset = Vector3.new(math.random(-20, 20), 0, math.random(-20, 20))
+			local spawnPos = center + offset + Vector3.new(0, 3, 0)
+			local npc = Deps.NPCService.SpawnHostile(spawnPos, player, npcConfig, function(_killer: Player?)
+				if states[player] ~= state or state.objectiveToken ~= token then
+					return
+				end
+				state.npcProgress += 1
+				broadcastProgress(player, state, false, `{objective.Description} ({state.npcProgress}/{objective.Count})`)
+				if state.npcProgress >= (objective.Count :: number) then
+					advanceObjective(player, state)
+				end
+			end)
+			table.insert(state.activeNPCs, npc)
+		end
 	end
 end
 
-local function handleZoneReached(player: Player, zoneTag: string)
-	local squad = getSquad(player)
-	if not squad then
+function assignNextMission(player)
+	local state = states[player]
+	if not state then
 		return
 	end
-	local objective = currentObjective(squad)
+	clearActiveNPCs(state)
+
+	local pool = MissionConfig._PoolByClass[state.classId]
+	if not pool or #pool == 0 then
+		state.missionDef = nil
+		return
+	end
+
+	if #state.bag == 0 then
+		local bag = shuffled(pool)
+		if state.lastMissionId and bag[1] == state.lastMissionId and #bag > 1 then
+			local swapIndex = math.random(2, #bag)
+			bag[1], bag[swapIndex] = bag[swapIndex], bag[1]
+		end
+		state.bag = bag
+	end
+
+	local missionId = table.remove(state.bag, 1) :: string
+	local def = MissionConfig[missionId]
+	local profile = Deps.DataService.GetProfile(player)
+	local level = profile and profile.Level or 1
+	local scale = difficultyScale(level)
+
+	state.missionDef = def
+	state.liveObjectives = buildLiveObjectives(def, scale)
+	state.objectiveIndex = 1
+	state.npcProgress = 0
+	state.objectiveToken += 1
+
+	broadcastAssigned(player, state)
+	beginCurrentObjective(player, state)
+end
+
+local function handleZoneReached(player: Player, zoneTag: string)
+	local state = states[player]
+	if not state then
+		return
+	end
+	local objective = currentObjective(state)
 	if not objective or objective.Type ~= "ReachZone" or objective.ZoneTag ~= zoneTag then
 		return
 	end
@@ -284,15 +258,15 @@ local function handleZoneReached(player: Player, zoneTag: string)
 		Deps.DataService.IncrementStat(player, "Escapes", 1)
 	end
 
-	advanceObjective(squad)
+	advanceObjective(player, state)
 end
 
 local function handleTerminalUsed(player: Player, partTag: string)
-	local squad = getSquad(player)
-	if not squad then
+	local state = states[player]
+	if not state then
 		return
 	end
-	local objective = currentObjective(squad)
+	local objective = currentObjective(state)
 	if not objective or objective.Type ~= "InteractPart" or objective.PartTag ~= partTag then
 		return
 	end
@@ -301,8 +275,11 @@ local function handleTerminalUsed(player: Player, partTag: string)
 		Deps.DoorService.UnlockGroup("CellDoor")
 	end
 
-	advanceObjective(squad)
+	advanceObjective(player, state)
 end
+
+local zoneTagListeners: { [string]: boolean } = {}
+local partTagListeners: { [string]: boolean } = {}
 
 local function registerZoneTag(zoneTag: string)
 	if zoneTagListeners[zoneTag] then
@@ -373,14 +350,27 @@ local function discoverTags()
 	end
 end
 
-function MissionService.GetSquadId(player: Player): number?
-	return playerSquad[player]
+--- Called by ClassService right after a player's first spawn.
+function MissionService.StartForPlayer(player: Player, classId: string)
+	states[player] = {
+		classId = classId,
+		missionDef = nil,
+		liveObjectives = {},
+		objectiveIndex = 1,
+		objectiveToken = 0,
+		npcProgress = 0,
+		activeNPCs = {},
+		bag = {},
+		lastMissionId = nil,
+	}
+	assignNextMission(player)
 end
 
-function MissionService.ResetForNewRound()
-	table.clear(squads)
-	table.clear(playerSquad)
-	nextSquadId = 1
+--- Called by ClassService.RequestClassChange: your old class's mission and
+--- any NPCs it spawned don't carry over, but your bag-based no-repeat
+--- history does reset per class (each class has its own small pool anyway).
+function MissionService.OnClassChanged(player: Player, classId: string)
+	MissionService.StartForPlayer(player, classId)
 end
 
 function MissionService.Init(deps: any)
@@ -388,14 +378,11 @@ function MissionService.Init(deps: any)
 	discoverTags()
 
 	Players.PlayerRemoving:Connect(function(player)
-		local squad = getSquad(player)
-		if squad then
-			local idx = table.find(squad.members, player)
-			if idx then
-				table.remove(squad.members, idx)
-			end
+		local state = states[player]
+		if state then
+			clearActiveNPCs(state)
 		end
-		playerSquad[player] = nil
+		states[player] = nil
 	end)
 end
 
