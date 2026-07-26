@@ -17,7 +17,10 @@ export type GameConfig = {
 }
 
 local GameConfig: GameConfig = {
-	MinPlayersToStart = 4,
+	-- 1 so a lone developer can playtest end-to-end (round start, class spawn,
+	-- missions) without needing extra test accounts. Raise this for a live
+	-- server where you actually want multiple humans before a round begins.
+	MinPlayersToStart = 1,
 	IntermissionSeconds = 30,
 	RoundLengthSeconds = 60 * 15,
 	RoundEndDisplaySeconds = 12,

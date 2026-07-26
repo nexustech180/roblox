@@ -148,10 +148,24 @@ function advanceObjective(squad: Squad)
 end
 
 function assignMissionToSquad(squad: Squad)
-	local pool = MissionConfig._PoolByFaction[squad.faction]
-	if not pool or #pool == 0 then
+	local fullPool = MissionConfig._PoolByFaction[squad.faction]
+	if not fullPool or #fullPool == 0 then
 		return
 	end
+
+	-- Missions like EliminateCount need actual hostile targets to exist, which
+	-- isn't plausible with a tiny server population - filter those out rather
+	-- than handing a squad an objective nobody can ever complete. Falls back
+	-- to the full pool if filtering would leave nothing assignable.
+	local totalPlayers = #Players:GetPlayers()
+	local eligiblePool = {}
+	for _, id in ipairs(fullPool) do
+		if totalPlayers >= (MissionConfig[id].MinPlayers or 1) then
+			table.insert(eligiblePool, id)
+		end
+	end
+	local pool = #eligiblePool > 0 and eligiblePool or fullPool
+
 	local missionId = pool[math.random(1, #pool)]
 	squad.missionDef = MissionConfig[missionId]
 	squad.objectiveIndex = 1

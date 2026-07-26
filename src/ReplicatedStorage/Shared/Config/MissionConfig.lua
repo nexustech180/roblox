@@ -29,6 +29,12 @@ export type MissionDefinition = {
 	Objectives: { Objective }, -- completed in order
 	RewardCredits: number,
 	RewardXP: number,
+	-- Minimum total players on the server for this mission to be eligible.
+	-- Defaults to 1 (solo-friendly) when omitted. EliminateCount missions need
+	-- actual hostile targets to exist, so they set this higher - see
+	-- MissionService.assignMissionToSquad, which filters the pool by this
+	-- against #Players:GetPlayers() before picking.
+	MinPlayers: number?,
 }
 
 local MissionConfig: { [string]: MissionDefinition } = {
@@ -65,6 +71,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		},
 		RewardCredits = 175,
 		RewardXP = 125,
+		MinPlayers = 4,
 	},
 
 	LiberateClassD = {
@@ -99,6 +106,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		},
 		RewardCredits = 175,
 		RewardXP = 125,
+		MinPlayers = 4,
 	},
 
 	ReachTheSurface = {

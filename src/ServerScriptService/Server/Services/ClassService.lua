@@ -104,8 +104,11 @@ function ClassService.BuildInitialRoster(players: { Player }): { [Player]: strin
 	local pool = shuffled(players)
 	local n = #pool
 
+	-- Below 2 players there's nobody for an SCP to hunt (or be hunted by), so
+	-- a solo tester gets a normal human class instead of always drawing the
+	-- same lonely monster.
 	local scpOrder = ClassConfig._SCPActivationOrder :: { string }
-	local scpCount = math.clamp(math.floor(n / 5), 1, #scpOrder)
+	local scpCount = if n < 2 then 0 else math.clamp(math.floor(n / 5), 1, #scpOrder)
 
 	for i = 1, scpCount do
 		local player = table.remove(pool) :: Player

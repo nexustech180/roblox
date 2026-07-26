@@ -215,7 +215,10 @@ export type GameConfig = {
 }
 
 local GameConfig: GameConfig = {
-	MinPlayersToStart = 4,
+	-- 1 so a lone developer can playtest end-to-end (round start, class spawn,
+	-- missions) without needing extra test accounts. Raise this for a live
+	-- server where you actually want multiple humans before a round begins.
+	MinPlayersToStart = 1,
 	IntermissionSeconds = 30,
 	RoundLengthSeconds = 60 * 15,
 	RoundEndDisplaySeconds = 12,
@@ -303,6 +306,12 @@ export type MissionDefinition = {
 	Objectives: { Objective }, -- completed in order
 	RewardCredits: number,
 	RewardXP: number,
+	-- Minimum total players on the server for this mission to be eligible.
+	-- Defaults to 1 (solo-friendly) when omitted. EliminateCount missions need
+	-- actual hostile targets to exist, so they set this higher - see
+	-- MissionService.assignMissionToSquad, which filters the pool by this
+	-- against #Players:GetPlayers() before picking.
+	MinPlayers: number?,
 }
 
 local MissionConfig: { [string]: MissionDefinition } = {
@@ -339,6 +348,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		},
 		RewardCredits = 175,
 		RewardXP = 125,
+		MinPlayers = 4,
 	},
 
 	LiberateClassD = {
@@ -373,6 +383,7 @@ local MissionConfig: { [string]: MissionDefinition } = {
 		},
 		RewardCredits = 175,
 		RewardXP = 125,
+		MinPlayers = 4,
 	},
 
 	ReachTheSurface = {
@@ -1394,8 +1405,11 @@ function ClassService.BuildInitialRoster(players: { Player }): { [Player]: strin
 	local pool = shuffled(players)
 	local n = #pool
 
+	-- Below 2 players there's nobody for an SCP to hunt (or be hunted by), so
+	-- a solo tester gets a normal human class instead of always drawing the
+	-- same lonely monster.
 	local scpOrder = ClassConfig._SCPActivationOrder :: { string }
-	local scpCount = math.clamp(math.floor(n / 5), 1, #scpOrder)
+	local scpCount = if n < 2 then 0 else math.clamp(math.floor(n / 5), 1, #scpOrder)
 
 	for i = 1, scpCount do
 		local player = table.remove(pool) :: Player
@@ -2632,10 +2646,24 @@ function advanceObjective(squad: Squad)
 end
 
 function assignMissionToSquad(squad: Squad)
-	local pool = MissionConfig._PoolByFaction[squad.faction]
-	if not pool or #pool == 0 then
+	local fullPool = MissionConfig._PoolByFaction[squad.faction]
+	if not fullPool or #fullPool == 0 then
 		return
 	end
+
+	-- Missions like EliminateCount need actual hostile targets to exist, which
+	-- isn't plausible with a tiny server population - filter those out rather
+	-- than handing a squad an objective nobody can ever complete. Falls back
+	-- to the full pool if filtering would leave nothing assignable.
+	local totalPlayers = #Players:GetPlayers()
+	local eligiblePool = {}
+	for _, id in ipairs(fullPool) do
+		if totalPlayers >= (MissionConfig[id].MinPlayers or 1) then
+			table.insert(eligiblePool, id)
+		end
+	end
+	local pool = #eligiblePool > 0 and eligiblePool or fullPool
+
 	local missionId = pool[math.random(1, #pool)]
 	squad.missionDef = MissionConfig[missionId]
 	squad.objectiveIndex = 1
